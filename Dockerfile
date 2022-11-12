@@ -1,14 +1,16 @@
-FROM alpine:3.10
+FROM node:14.17.5-alpine
 
-USER root
+# Create app directory
+WORKDIR /usr/src/app
 
-RUN apk add --no-cache curl jq
+# Install app dependencies
+COPY package*.json ./
 
-RUN curl -fsSLO https://get.docker.com/builds/Linux/x86_64/docker-17.04.0-ce.tgz \
-  && tar xzvf docker-17.04.0-ce.tgz \
-  && mv docker/docker /usr/local/bin \
-  && rm -r docker docker-17.04.0-ce.tgz
+RUN npm install
 
-COPY entrypoint.sh /entrypoint.sh
+# Bundle app source
+COPY . .
 
-ENTRYPOINT ["/entrypoint.sh"]
+EXPOSE 3000
+
+CMD [ "node", "server.js" ]
