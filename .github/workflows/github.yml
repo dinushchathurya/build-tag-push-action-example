@@ -1,0 +1,20 @@
+on: [push]
+
+jobs:
+  github-login-build-tag-push:
+    runs-on: ubuntu-latest
+    name: GitHub Login, Build, Tag & Push
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      - name: Build, Tag & Publish Image to GitHub Container Registry
+        uses: dinushchathurya/build-tag-push-action@v1.2.0
+        with:
+          username: ${{ github.actor }}
+          password: ${{ secrets.TOKEN }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ github.actor }}
+          repository: nodejs-github
+          tag: 1.0.0
+          registry: ghcr.io
