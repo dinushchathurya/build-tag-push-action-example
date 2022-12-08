@@ -1,5 +1,3 @@
-[![.github/workflows/main.yml](https://github.com/dinushchathurya/build-tag-push-action-example/actions/workflows/main.yml/badge.svg)](https://github.com/dinushchathurya/build-tag-push-action-example/actions/workflows/main.yml)
-
 This is a sample application which is implemented using <a href="https://github.com/marketplace/actions/docker-login-build-tag-push-action">dinushchathurya/build-tag-push-action</a>
 
 ### GitHub Action
