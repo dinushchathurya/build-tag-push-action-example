@@ -1,4 +1,4 @@
-This is a sample application which is implemented using <a href="https://github.com/marketplace/actions/docker-login-build-tag-push-action">dinushchathurya/build-tag-push-action</a>
+This is a sample application which is implemented using <a href="https://github.com/marketplace/actions/docker-login-build-tag-push-action">dinushchathurya/build-tag-push-action</a>.
 
 ### GitHub Action
 
