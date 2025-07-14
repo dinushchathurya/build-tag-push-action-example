@@ -11,7 +11,7 @@ jobs:
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER__NEW_PASSWORD }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
