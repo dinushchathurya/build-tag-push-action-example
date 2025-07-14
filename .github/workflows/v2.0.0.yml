@@ -17,7 +17,6 @@ jobs:
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository:  build-push-tag-action
           tag: 1.0.0
-          push: true
-          dry_run: false
+          platforms: linux/amd64,linux/arm64
 
 
