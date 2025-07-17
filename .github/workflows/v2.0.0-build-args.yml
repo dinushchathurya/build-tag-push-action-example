@@ -193,7 +193,7 @@ jobs:
           cat verification_report.md
 
       - name: Upload Verification Report
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: image-verification-report
           path: verification_report.md
