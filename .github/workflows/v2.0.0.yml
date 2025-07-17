@@ -1,3 +1,5 @@
+name: Docker Build and Push
+
 on: 
   push: 
     paths:
@@ -11,6 +13,7 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v3
+      
       - name: Build, Tag & Publish Image to DockerHub
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
@@ -19,11 +22,11 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository:  build-push-tag-action
+          repository: build-push-tag-action
           tag: ${{ github.sha }}
-          platforms: linux/amd64,linux/arm64,linux/arm/v7  
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
           labels: |
-            org.opencontainers.image.description =Build and push Docker images to DockerHub and GitHub Container Registry
+            org.opencontainers.image.description=Build and push Docker images to DockerHub and GitHub Container Registry
             org.opencontainers.image.vendor=Open Source Sri Lanka
     
       # Push to GitHub Container Registry
@@ -35,16 +38,16 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ github.actor }}
-          repository:  nodejs-github
+          repository: nodejs-github
           tag: ${{ github.sha }}
           registry: ghcr.io
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           labels: |
-            org.opencontainers.image.description =Build and push Docker images to DockerHub and GitHub Container Registry
+            org.opencontainers.image.description=Build and push Docker images to DockerHub and GitHub Container Registry
             org.opencontainers.image.vendor=Open Source Sri Lanka
       
-      #  Login to GitHub Container Registry
-      - name: Login to GitHub Container Registry
+      # Login to GitHub Container Registry with caching
+      - name: Login to GitHub Container Registry with Cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ github.actor }}
@@ -52,12 +55,12 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ github.actor }}
-          repository:  nodejs-github
+          repository: nodejs-github
           tag: ${{ github.sha }}
           registry: ghcr.io
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           cache_from: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache
           cache_to: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache,mode=max
           labels: |
-            org.opencontainers.image.description =Build and push Docker images to DockerHub and GitHub Container Registry
+            org.opencontainers.image.description=Build and push Docker images to DockerHub and GitHub Container Registry
             org.opencontainers.image.vendor=Open Source Sri Lanka
