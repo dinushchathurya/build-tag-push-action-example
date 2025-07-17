@@ -3,7 +3,6 @@ on:
     paths:
       - '.github/workflows/v2.0.0.yml'
 
-
 jobs:
   docker-login-build-tag-push:
     runs-on: ubuntu-latest
@@ -21,7 +20,7 @@ jobs:
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository:  build-push-tag-action
           tag: 1.0.0
-          platforms: linux/amd64,linux/arm64  
+          platforms: linux/amd64,linux/arm64,linux/arm/v7  
     
        # Login to GitHub Container Registry
       - name: Login to GitHub Container Registry
