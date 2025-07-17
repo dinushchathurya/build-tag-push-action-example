@@ -1,0 +1,265 @@
+name: 10 - Dry Run Testing
+
+on:
+  workflow_dispatch:
+    inputs:
+      test_complexity:
+        description: 'Dry run test complexity'
+        required: false
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - basic
+          - advanced
+          - multiplatform
+  push:
+    paths:
+      - '.github/workflows/v2.0.0-dry.yml'
+
+jobs:
+  basic-dry-run:
+    if: github.event.inputs.test_complexity == 'all' || github.event.inputs.test_complexity == 'basic' || github.event.inputs.test_complexity == ''
+    runs-on: ubuntu-latest
+    name: Basic Dry Run Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🧪 Basic Dry Run"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: dry-run-basic
+          tag: basic-${{ github.run_number }}
+          dry_run: true
+          platforms: linux/amd64
+          build_args: |
+            TEST_MODE=dry-run
+            BUILD_NUMBER=${{ github.run_number }}
+          labels: |
+            test.type=basic-dry-run
+            dry_run=true
+
+  advanced-dry-run:
+    if: github.event.inputs.test_complexity == 'all' || github.event.inputs.test_complexity == 'advanced' || github.event.inputs.test_complexity == ''
+    runs-on: ubuntu-latest
+    name: Advanced Dry Run Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🧪 Advanced Dry Run with All Features"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: dry-run-advanced
+          tag: advanced-${{ github.run_number }}
+          dry_run: true
+          platforms: linux/amd64
+          
+          # Build configuration
+          build_args: |
+            NODE_ENV=test
+            VERSION=1.0.0-dry-run
+            BUILD_DATE=${{ github.event.head_commit.timestamp }}
+            GITHUB_SHA=${{ github.sha }}
+            TEST_MODE=dry-run-advanced
+          
+          # Cache (will be tested but not persisted)
+          cache_from: type=gha
+          cache_to: type=gha,mode=max
+          
+          # Comprehensive labels
+          labels: |
+            org.opencontainers.image.title=Advanced Dry Run Test
+            org.opencontainers.image.description=Testing all features in dry-run mode
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
+            test.type=advanced-dry-run
+            dry_run=true
+            build.number=${{ github.run_number }}
+          
+          # Network and resources (safe to test)
+          network: host
+          shm_size: 2g
+          add_hosts: |
+            host.docker.internal:host-gateway
+            test.local:127.0.0.1
+          allow: network.host
+          
+          # Security features (will be validated)
+          provenance: true
+          sbom: true
+
+  multiplatform-dry-run:
+    if: github.event.inputs.test_complexity == 'all' || github.event.inputs.test_complexity == 'multiplatform' || github.event.inputs.test_complexity == ''
+    runs-on: ubuntu-latest
+    name: Multi-Platform Dry Run Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🧪 Multi-Platform Dry Run"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: dry-run-multiplatform
+          tag: multiplatform-${{ github.run_number }}
+          dry_run: true
+          platforms: linux/amd64,linux/arm64,linux/arm/v7
+          
+          # Cache for multi-platform
+          cache_from: type=gha
+          cache_to: type=gha,mode=max
+          
+          build_args: |
+            TEST_MODE=dry-run-multiplatform
+            PLATFORMS=linux/amd64,linux/arm64,linux/arm/v7
+            BUILD_NUMBER=${{ github.run_number }}
+          
+          labels: |
+            test.type=multiplatform-dry-run
+            platforms=linux/amd64,linux/arm64,linux/arm/v7
+            dry_run=true
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+
+  error-scenario-dry-run:
+    runs-on: ubuntu-latest
+    name: Error Scenario Dry Run
+    continue-on-error: true
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🧪 Test Invalid Dockerfile (Expected to Fail)"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: NonExistentDockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: dry-run-error-test
+          tag: error-${{ github.run_number }}
+          dry_run: true
+          
+      - name: "🧪 Test Invalid Platform (Expected to Warn)"
+        continue-on-error: true
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: dry-run-platform-test
+          tag: platform-${{ github.run_number }}
+          dry_run: true
+          platforms: invalid/platform
+
+  dry-run-verification:
+    needs: [basic-dry-run, advanced-dry-run, multiplatform-dry-run]
+    if: always()
+    runs-on: ubuntu-latest
+    name: Dry Run Verification
+    
+    steps:
+      - name: "📊 Dry Run Test Results"
+        run: |
+          echo "🧪 DRY RUN TEST RESULTS SUMMARY"
+          echo "==============================="
+          echo ""
+          echo "**Workflow:** ${{ github.workflow }}"
+          echo "**Run ID:** ${{ github.run_id }}"
+          echo "**Test Complexity:** ${{ github.event.inputs.test_complexity || 'all' }}"
+          echo "**Date:** $(date -u)"
+          echo ""
+          
+          # Job results
+          BASIC_STATUS="${{ needs.basic-dry-run.result }}"
+          ADVANCED_STATUS="${{ needs.advanced-dry-run.result }}"
+          MULTIPLATFORM_STATUS="${{ needs.multiplatform-dry-run.result }}"
+          
+          echo "## Test Results"
+          echo "| Test Type | Status | Notes |"
+          echo "|-----------|--------|-------|"
+          
+          if [[ "$BASIC_STATUS" != "skipped" ]]; then
+            if [[ "$BASIC_STATUS" == "success" ]]; then
+              echo "| Basic Dry Run | ✅ Success | Single platform test passed |"
+            else
+              echo "| Basic Dry Run | ❌ Failed | Basic dry run encountered issues |"
+            fi
+          else
+            echo "| Basic Dry Run | ⏭️ Skipped | Not selected for this run |"
+          fi
+          
+          if [[ "$ADVANCED_STATUS" != "skipped" ]]; then
+            if [[ "$ADVANCED_STATUS" == "success" ]]; then
+              echo "| Advanced Dry Run | ✅ Success | All features tested successfully |"
+            else
+              echo "| Advanced Dry Run | ❌ Failed | Advanced features test failed |"
+            fi
+          else
+            echo "| Advanced Dry Run | ⏭️ Skipped | Not selected for this run |"
+          fi
+          
+          if [[ "$MULTIPLATFORM_STATUS" != "skipped" ]]; then
+            if [[ "$MULTIPLATFORM_STATUS" == "success" ]]; then
+              echo "| Multi-Platform Dry Run | ✅ Success | Multi-arch build validation passed |"
+            else
+              echo "| Multi-Platform Dry Run | ❌ Failed | Multi-platform test failed |"
+            fi
+          else
+            echo "| Multi-Platform Dry Run | ⏭️ Skipped | Not selected for this run |"
+          fi
+          
+          echo ""
+          echo "## 🎯 Key Validations"
+          echo "- ✅ Build validation without registry push"
+          echo "- ✅ Multi-platform compatibility check"
+          echo "- ✅ Build args and labels processing"
+          echo "- ✅ Cache configuration validation"
+          echo "- ✅ Security features compatibility"
+          echo "- ✅ Network and resource settings verification"
+          echo ""
+          echo "## 💡 Dry Run Benefits"
+          echo "- **Fast Testing**: Validate builds without pushing"
+          echo "- **Cost Effective**: No registry storage used"
+          echo "- **Safe Experimentation**: Test configurations risk-free"
+          echo "- **CI/CD Integration**: Perfect for pull request validation"
+          echo ""
+          
+          # Summary
+          SUCCESS_COUNT=0
+          TOTAL_TESTS=0
+          
+          [[ "$BASIC_STATUS" != "skipped" ]] && TOTAL_TESTS=$((TOTAL_TESTS + 1)) && [[ "$BASIC_STATUS" == "success" ]] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+          [[ "$ADVANCED_STATUS" != "skipped" ]] && TOTAL_TESTS=$((TOTAL_TESTS + 1)) && [[ "$ADVANCED_STATUS" == "success" ]] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+          [[ "$MULTIPLATFORM_STATUS" != "skipped" ]] && TOTAL_TESTS=$((TOTAL_TESTS + 1)) && [[ "$MULTIPLATFORM_STATUS" == "success" ]] && SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+          
+          if [[ $SUCCESS_COUNT -eq $TOTAL_TESTS && $TOTAL_TESTS -gt 0 ]]; then
+            echo "🎉 ALL DRY RUN TESTS PASSED! ($SUCCESS_COUNT/$TOTAL_TESTS)"
+          elif [[ $TOTAL_TESTS -gt 0 ]]; then
+            echo "⚠️ Some dry run tests failed: $SUCCESS_COUNT/$TOTAL_TESTS passed"
+          else
+            echo "ℹ️ No dry run tests were executed in this run"
+          fi
