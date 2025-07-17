@@ -40,7 +40,7 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: build-push-tag-action
-          tag: no-cache-${{ github.run_number }}
+          tag: cache
           platforms: linux/amd64
           no_cache: true
           labels: |
@@ -69,7 +69,7 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: build-push-tag-action
-          tag: gha-cache-${{ github.run_number }}
+          tag: gha-cache
           platforms: linux/amd64,linux/arm64
           cache_from: type=gha
           cache_to: type=gha,mode=max
@@ -100,7 +100,7 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: build-push-tag-action
-          tag: registry-cache-${{ github.run_number }}
+          tag: registry-cache
           platforms: linux/amd64
           cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
           cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
@@ -131,7 +131,7 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: build-push-tag-action
-          tag: combined-${{ github.run_number }}
+          tag: combined-cache
           platforms: linux/amd64
           cache_from: |
             type=gha
