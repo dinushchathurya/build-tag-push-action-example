@@ -15,7 +15,7 @@ on:
           - individual-tests
   push:
     paths:
-      - '.github/workflows/enhanced-network-resources.yml'
+      - '.github/workflows/v2.0.0-network.yml'
 
 jobs:
   # ==========================================
