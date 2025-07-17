@@ -1,8 +1,8 @@
-name: 0-Docker Build and Push Basic Test GitHub Container Registry
+name: 0-Docker Build and Push Basic Test GitHub Container Registry 
 on: 
   push: 
     paths:
-      - '.github/workflows/github.yml'
+      - '.github/workflows/0-github.yml'
 
 jobs:
   github-login-build-tag-push:
