@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: 1- Docker Build and Push Basic Test
 
 on: 
   push: 

@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: 2- Docker Build and PushMulti-Platform Test
 
 on: 
   push: 

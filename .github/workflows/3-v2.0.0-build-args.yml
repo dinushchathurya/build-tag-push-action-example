@@ -1,4 +1,4 @@
-name: Docker Build and Push with Build Args Injection
+name: 3- Docker Build and Push with Build Args Injection
 
 on: 
   push: 
