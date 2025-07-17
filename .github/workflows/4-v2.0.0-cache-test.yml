@@ -90,7 +90,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "🏪 Build with Registry Cache"
+      - name: "Build with Registry Cache"
         id: build_registry_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
