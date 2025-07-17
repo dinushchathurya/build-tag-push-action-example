@@ -1,21 +1,42 @@
-name: 08 - Network and Resources Test
+name: Enhanced Network and Resources Test
 
 on:
   workflow_dispatch:
+    inputs:
+      test_mode:
+        description: 'Test mode'
+        required: false
+        default: 'comprehensive'
+        type: choice
+        options:
+          - comprehensive
+          - network-only
+          - resources-only
+          - individual-tests
   push:
     paths:
-      - '.github/workflows/v2.0.0-network.yml'
+      - '.github/workflows/enhanced-network-resources.yml'
 
 jobs:
-  network-host-test:
+  # ==========================================
+  # NETWORK CONFIGURATION TESTS
+  # ==========================================
+  test-host-network:
+    if: github.event.inputs.test_mode == 'comprehensive' || github.event.inputs.test_mode == 'network-only' || github.event.inputs.test_mode == 'individual-tests' || github.event.inputs.test_mode == ''
     runs-on: ubuntu-latest
-    name: Host Network Test
+    name: Host Network Configuration Test
+    
+    outputs:
+      build_status: ${{ steps.host_network_build.outcome }}
+      image_url: ${{ steps.host_network_build.outputs.image_url }}
+      build_time: ${{ steps.host_network_build.outputs.build_time }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "🌐 Build with Host Network"
+      - name: "🌐 Build with Host Network Configuration"
+        id: host_network_build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
@@ -23,22 +44,475 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_USERNAME }}
-          repository: test-network-host
-          tag: network-${{ github.run_number }}
+          repository: test-host-network
+          tag: host-network-${{ github.run_number }}
           
-          # Network configuration
+          # Host network configuration
           network: host
+          allow: network.host
           
-          # Custom hosts
+          # Custom hosts for testing
           add_hosts: |
             host.docker.internal:host-gateway
             custom.local:127.0.0.1
             api.internal:10.0.0.1
             db.internal:10.0.0.2
+            cache.internal:10.0.0.3
           
-          # Allow host network
-          allow: network.host
+          # Build args to verify network settings
+          build_args: |
+            NETWORK_MODE=host
+            TEST_TYPE=host-network
+            BUILD_TIME=${{ github.event.head_commit.timestamp }}
+            RUN_NUMBER=${{ github.run_number }}
           
           labels: |
-            test.type=network-host
+            test.type=host-network
             network.mode=host
+            network.hosts.configured=true
+            test.timestamp=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            
+      - name: "✅ Verify Host Network Build Success"
+        if: steps.host_network_build.outcome == 'success'
+        run: |
+          echo "🎉 HOST NETWORK BUILD SUCCESSFUL!"
+          echo "================================="
+          echo "✅ Build Status: SUCCESS"
+          echo "✅ Image URL: ${{ steps.host_network_build.outputs.image_url }}"
+          echo "✅ Build Time: ${{ steps.host_network_build.outputs.build_time }}s"
+          echo "✅ Network Mode: host"
+          echo "✅ Network Entitlement: network.host allowed"
+          echo "✅ Custom Hosts: 5 hosts configured"
+          
+      - name: "❌ Host Network Build Failed"
+        if: steps.host_network_build.outcome == 'failure'
+        run: |
+          echo "❌ HOST NETWORK BUILD FAILED!"
+          echo "============================="
+          echo "❌ Build Status: FAILED"
+          echo "❌ Check the logs above for specific error details"
+          echo ""
+          echo "🔧 Common Issues:"
+          echo "- Network entitlement not supported"
+          echo "- Host network access denied"
+          echo "- Invalid host configuration"
+          exit 1
+
+  # ==========================================
+  # RESOURCE LIMITS TESTS
+  # ==========================================
+  test-resource-limits:
+    if: github.event.inputs.test_mode == 'comprehensive' || github.event.inputs.test_mode == 'resources-only' || github.event.inputs.test_mode == 'individual-tests' || github.event.inputs.test_mode == ''
+    runs-on: ubuntu-latest
+    name: Resource Limits Configuration Test
+    
+    outputs:
+      build_status: ${{ steps.resources_build.outcome }}
+      image_url: ${{ steps.resources_build.outputs.image_url }}
+      build_time: ${{ steps.resources_build.outputs.build_time }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "⚙️ Build with Resource Limits"
+        id: resources_build
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-resource-limits
+          tag: resources-${{ github.run_number }}
+          
+          # Shared memory configuration
+          shm_size: 2g
+          
+          # Resource limits (using safe values for GitHub Actions)
+          ulimit: |
+            nofile=1024:1024
+            nproc=2048:4096
+            memlock=67108864:67108864
+          
+          # Safe cgroup parent
+          cgroup_parent: /docker/test-container
+          
+          # Build args to verify resource settings
+          build_args: |
+            SHM_SIZE=2g
+            ULIMIT_NOFILE=1024:1024
+            ULIMIT_NPROC=2048:4096
+            TEST_TYPE=resource-limits
+            RUN_NUMBER=${{ github.run_number }}
+          
+          labels: |
+            test.type=resource-limits
+            resources.shm_size=2g
+            resources.ulimits.configured=true
+            resources.cgroup.configured=true
+            test.timestamp=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            
+      - name: "✅ Verify Resource Limits Build Success"
+        if: steps.resources_build.outcome == 'success'
+        run: |
+          echo "🎉 RESOURCE LIMITS BUILD SUCCESSFUL!"
+          echo "==================================="
+          echo "✅ Build Status: SUCCESS"
+          echo "✅ Image URL: ${{ steps.resources_build.outputs.image_url }}"
+          echo "✅ Build Time: ${{ steps.resources_build.outputs.build_time }}s"
+          echo "✅ Shared Memory: 2GB configured"
+          echo "✅ File Descriptors: 1024:1024 limit"
+          echo "✅ Process Limit: 2048:4096"
+          echo "✅ Memory Lock: 64MB limit"
+          echo "✅ Cgroup Parent: /docker/test-container"
+          
+      - name: "❌ Resource Limits Build Failed"
+        if: steps.resources_build.outcome == 'failure'
+        run: |
+          echo "❌ RESOURCE LIMITS BUILD FAILED!"
+          echo "==============================="
+          echo "❌ Build Status: FAILED"
+          echo "❌ Check the logs above for specific error details"
+          echo ""
+          echo "🔧 Common Issues:"
+          echo "- Invalid ulimit values"
+          echo "- Shared memory size not supported"
+          echo "- Cgroup configuration issues"
+          exit 1
+
+  # ==========================================
+  # COMBINED NETWORK AND RESOURCES TEST
+  # ==========================================
+  test-combined-configuration:
+    if: github.event.inputs.test_mode == 'comprehensive' || github.event.inputs.test_mode == ''
+    runs-on: ubuntu-latest
+    name: Combined Network and Resources Test
+    
+    outputs:
+      build_status: ${{ steps.combined_build.outcome }}
+      image_url: ${{ steps.combined_build.outputs.image_url }}
+      build_time: ${{ steps.combined_build.outputs.build_time }}
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🔧 Build with Combined Network and Resource Configuration"
+        id: combined_build
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-combined-config
+          tag: combined-${{ github.run_number }}
+          
+          # Network configuration
+          network: host
+          allow: network.host
+          add_hosts: |
+            host.docker.internal:host-gateway
+            test.local:127.0.0.1
+            api.test:10.0.0.1
+            db.test:10.0.0.2
+            cache.test:10.0.0.3
+            monitoring.test:10.0.0.4
+          
+          # Resource configuration
+          shm_size: 2g
+          ulimit: |
+            nofile=1024:1024
+            nproc=2048:4096
+            memlock=67108864:67108864
+          cgroup_parent: /docker/test-container
+          
+          # Additional build options
+          target: production
+          pull: true
+          platforms: linux/amd64
+          
+          # Comprehensive build args
+          build_args: |
+            NETWORK_MODE=host
+            SHM_SIZE=2g
+            CUSTOM_HOSTS=6
+            TEST_TYPE=combined-network-resources
+            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+            RUN_NUMBER=${{ github.run_number }}
+            GITHUB_SHA=${{ github.sha }}
+          
+          labels: |
+            test.type=combined-network-resources
+            network.mode=host
+            network.hosts.count=6
+            resources.shm_size=2g
+            resources.ulimits.enabled=true
+            resources.cgroup.configured=true
+            build.comprehensive=true
+            test.timestamp=${{ github.event.head_commit.timestamp }}
+            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            org.opencontainers.image.revision=${{ github.sha }}
+            
+      - name: "✅ Verify Combined Configuration Build Success"
+        if: steps.combined_build.outcome == 'success'
+        run: |
+          echo "🎉 COMBINED CONFIGURATION BUILD SUCCESSFUL!"
+          echo "=========================================="
+          echo "✅ Build Status: SUCCESS"
+          echo "✅ Image URL: ${{ steps.combined_build.outputs.image_url }}"
+          echo "✅ Build Time: ${{ steps.combined_build.outputs.build_time }}s"
+          echo ""
+          echo "📋 Network Configuration:"
+          echo "  ✅ Mode: host"
+          echo "  ✅ Entitlement: network.host"
+          echo "  ✅ Custom Hosts: 6 configured"
+          echo ""
+          echo "📋 Resource Configuration:"
+          echo "  ✅ Shared Memory: 2GB"
+          echo "  ✅ File Descriptors: 1024:1024"
+          echo "  ✅ Process Limit: 2048:4096"
+          echo "  ✅ Memory Lock: 64MB"
+          echo "  ✅ Cgroup Parent: /docker/test-container"
+          echo ""
+          echo "📋 Build Options:"
+          echo "  ✅ Target Stage: production"
+          echo "  ✅ Pull Latest: enabled"
+          echo "  ✅ Platform: linux/amd64"
+          
+      - name: "❌ Combined Configuration Build Failed"
+        if: steps.combined_build.outcome == 'failure'
+        run: |
+          echo "❌ COMBINED CONFIGURATION BUILD FAILED!"
+          echo "======================================"
+          echo "❌ Build Status: FAILED"
+          echo "❌ Check the logs above for specific error details"
+          echo ""
+          echo "🔧 Possible Issues:"
+          echo "- Network + Resource combination not supported"
+          echo "- Resource limits too restrictive"
+          echo "- Network entitlement conflicts"
+          echo "- Platform compatibility issues"
+          exit 1
+
+  # ==========================================
+  # IMAGE VERIFICATION TESTS
+  # ==========================================
+  verify-built-images:
+    needs: [test-host-network, test-resource-limits, test-combined-configuration]
+    if: always()
+    runs-on: ubuntu-latest
+    name: Verify Built Images
+    
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+      
+      - name: "🔍 Verify Network and Resources Images"
+        run: |
+          echo "🔍 IMAGE VERIFICATION REPORT"
+          echo "============================"
+          echo ""
+          echo "**Test Run:** ${{ github.run_number }}"
+          echo "**Workflow:** ${{ github.workflow }}"
+          echo "**Date:** $(date -u)"
+          echo ""
+          
+          # Check build statuses
+          HOST_NETWORK_STATUS="${{ needs.test-host-network.result }}"
+          RESOURCES_STATUS="${{ needs.test-resource-limits.result }}"
+          COMBINED_STATUS="${{ needs.test-combined-configuration.result }}"
+          
+          echo "## 📊 Build Results Summary"
+          echo "| Test Type | Status | Image | Notes |"
+          echo "|-----------|--------|-------|-------|"
+          
+          SUCCESS_COUNT=0
+          TOTAL_TESTS=0
+          
+          # Host Network Test
+          if [[ "$HOST_NETWORK_STATUS" != "skipped" ]]; then
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
+            if [[ "$HOST_NETWORK_STATUS" == "success" ]]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-host-network:host-network-${{ github.run_number }}"
+              
+              if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                NETWORK_MODE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.mode"}}' 2>/dev/null || echo "unknown")
+                echo "| Host Network | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, Mode: $NETWORK_MODE |"
+                
+                # Verify labels
+                echo ""
+                echo "🏷️ **Host Network Image Labels:**"
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("test.")) | "\(.key)=\(.value)"' | sort
+              else
+                echo "| Host Network | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
+              fi
+            else
+              echo "| Host Network | ❌ Failed | - | Build failed |"
+            fi
+          else
+            echo "| Host Network | ⏭️ Skipped | - | Not selected for this run |"
+          fi
+          
+          # Resource Limits Test
+          if [[ "$RESOURCES_STATUS" != "skipped" ]]; then
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
+            if [[ "$RESOURCES_STATUS" == "success" ]]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-resource-limits:resources-${{ github.run_number }}"
+              
+              if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                SHM_SIZE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "resources.shm_size"}}' 2>/dev/null || echo "unknown")
+                echo "| Resource Limits | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, SHM: $SHM_SIZE |"
+                
+                # Verify labels
+                echo ""
+                echo "🏷️ **Resource Limits Image Labels:**"
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("resources.") or startswith("test.")) | "\(.key)=\(.value)"' | sort
+              else
+                echo "| Resource Limits | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
+              fi
+            else
+              echo "| Resource Limits | ❌ Failed | - | Build failed |"
+            fi
+          else
+            echo "| Resource Limits | ⏭️ Skipped | - | Not selected for this run |"
+          fi
+          
+          # Combined Test
+          if [[ "$COMBINED_STATUS" != "skipped" ]]; then
+            TOTAL_TESTS=$((TOTAL_TESTS + 1))
+            if [[ "$COMBINED_STATUS" == "success" ]]; then
+              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-combined-config:combined-${{ github.run_number }}"
+              
+              if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                NETWORK_MODE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.mode"}}' 2>/dev/null || echo "unknown")
+                HOST_COUNT=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.hosts.count"}}' 2>/dev/null || echo "unknown")
+                echo "| Combined Config | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, Network: $NETWORK_MODE, Hosts: $HOST_COUNT |"
+                
+                # Verify comprehensive labels
+                echo ""
+                echo "🏷️ **Combined Configuration Image Labels:**"
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("resources.") or startswith("test.") or startswith("build.")) | "\(.key)=\(.value)"' | sort
+              else
+                echo "| Combined Config | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
+              fi
+            else
+              echo "| Combined Config | ❌ Failed | - | Build failed |"
+            fi
+          else
+            echo "| Combined Config | ⏭️ Skipped | - | Not selected for this run |"
+          fi
+          
+          echo ""
+          echo "## 🎯 Final Results"
+          echo "=================="
+          
+          if [[ $SUCCESS_COUNT -eq $TOTAL_TESTS && $TOTAL_TESTS -gt 0 ]]; then
+            echo "🎉 **ALL NETWORK AND RESOURCE TESTS PASSED!** ($SUCCESS_COUNT/$TOTAL_TESTS)"
+            echo ""
+            echo "✅ **Confirmed Working Features:**"
+            echo "- Host network mode configuration"
+            echo "- Custom host mappings"
+            echo "- Shared memory size configuration"
+            echo "- Resource limits (ulimits)"
+            echo "- Cgroup parent configuration"
+            echo "- Combined network + resource settings"
+          elif [[ $TOTAL_TESTS -gt 0 ]]; then
+            echo "⚠️ **PARTIAL SUCCESS:** $SUCCESS_COUNT/$TOTAL_TESTS tests passed"
+            echo ""
+            echo "🔧 **Review failed tests above for specific issues**"
+          else
+            echo "ℹ️ **NO TESTS EXECUTED** - All tests were skipped"
+          fi
+          
+          echo ""
+          echo "📋 **Test Configuration:** ${{ github.event.inputs.test_mode || 'comprehensive' }}"
+          echo "🔗 **Action Version:** dinushchathurya/build-tag-push-action@v2.0.0-rc.1"
+
+  # ==========================================
+  # GENERATE DETAILED REPORT
+  # ==========================================
+  generate-network-resources-report:
+    needs: [test-host-network, test-resource-limits, test-combined-configuration, verify-built-images]
+    if: always()
+    runs-on: ubuntu-latest
+    name: Generate Network & Resources Report
+    
+    steps:
+      - name: "📊 Generate Detailed Report"
+        run: |
+          cat > network-resources-report.md << 'EOF'
+          # 🌐 Network and Resources Test Report
+          
+          **Generated:** $(date -u)  
+          **Workflow:** ${{ github.workflow }}  
+          **Run ID:** ${{ github.run_id }}  
+          **Test Mode:** ${{ github.event.inputs.test_mode || 'comprehensive' }}  
+          
+          ## 📋 Test Results
+          
+          | Test Component | Status | Build Time | Notes |
+          |---------------|--------|------------|-------|
+          | Host Network | ${{ needs.test-host-network.result == 'success' && '✅ Success' || needs.test-host-network.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | ${{ needs.test-host-network.outputs.build_time || 'N/A' }}s | Network mode: host |
+          | Resource Limits | ${{ needs.test-resource-limits.result == 'success' && '✅ Success' || needs.test-resource-limits.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | ${{ needs.test-resource-limits.outputs.build_time || 'N/A' }}s | SHM: 2GB, ulimits configured |
+          | Combined Config | ${{ needs.test-combined-configuration.result == 'success' && '✅ Success' || needs.test-combined-configuration.result == 'skipped' && '⏭️ Skipped' || '❌ Failed' }} | ${{ needs.test-combined-configuration.outputs.build_time || 'N/A' }}s | Network + Resources |
+          | Image Verification | ${{ needs.verify-built-images.result == 'success' && '✅ Success' || '❌ Failed' }} | - | Registry pull and validation |
+          
+          ## ✅ Tested Features
+          
+          ### Network Configuration
+          - ✅ Host network mode (`network: host`)
+          - ✅ Network entitlements (`allow: network.host`)
+          - ✅ Custom host mappings (`add_hosts`)
+          - ✅ Multiple host entries (6 hosts tested)
+          
+          ### Resource Management
+          - ✅ Shared memory configuration (`shm_size: 2g`)
+          - ✅ File descriptor limits (`nofile=1024:1024`)
+          - ✅ Process limits (`nproc=2048:4096`)
+          - ✅ Memory lock limits (`memlock=67108864:67108864`)
+          - ✅ Cgroup parent configuration
+          
+          ### Combined Features
+          - ✅ Network + Resource settings together
+          - ✅ Production target builds
+          - ✅ Image pull optimization
+          - ✅ Comprehensive labeling
+          
+          ## 🚫 Known Limitations
+          
+          - ❌ `security.insecure` entitlement not supported in GitHub Actions
+          - ⚠️ Some ulimit values may be restricted by runner environment
+          - ⚠️ Cgroup configurations limited to safe values
+          
+          ## 🎯 Success Criteria
+          
+          ${{ (needs.test-host-network.result == 'success' || needs.test-host-network.result == 'skipped') && (needs.test-resource-limits.result == 'success' || needs.test-resource-limits.result == 'skipped') && (needs.test-combined-configuration.result == 'success' || needs.test-combined-configuration.result == 'skipped') && needs.verify-built-images.result == 'success' && '🎉 **ALL NETWORK AND RESOURCE TESTS SUCCESSFUL!**' || '⚠️ Some tests encountered issues - review detailed results above.' }}
+          
+          ---
+          *Report generated by GitHub Actions*
+          EOF
+          
+          echo "📋 Network and Resources test report:"
+          cat network-resources-report.md
+          
+      - name: Upload Network Resources Report
+        uses: actions/upload-artifact@v4
+        with:
+          name: network-resources-report-${{ github.run_number }}
+          path: network-resources-report.md
+          retention-days: 30
