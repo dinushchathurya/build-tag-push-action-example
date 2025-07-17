@@ -49,6 +49,16 @@ jobs:
                 test.timestamp=${{ github.event.head_commit.timestamp }}
 
       # ==========================================
+      # DOCKER LOGIN FOR VERIFICATION
+      # ==========================================
+      
+      - name: Login to Docker Hub for Verification
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+
+      # ==========================================
       # VERIFICATION STEPS
       # ==========================================
       
@@ -58,10 +68,20 @@ jobs:
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
           
           # Pull the image to inspect it
+          echo "📥 Pulling image: $IMAGE_NAME"
           docker pull "$IMAGE_NAME"
           
+          echo ""
           echo "📋 All Labels:"
-          docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' | sort
+          LABELS_JSON=$(docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}')
+          
+          if [[ "$LABELS_JSON" == "null" || "$LABELS_JSON" == "{}" ]]; then
+            echo "❌ NO LABELS FOUND!"
+            echo "This indicates the labels were not applied during build."
+            exit 1
+          else
+            echo "$LABELS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | sort
+          fi
           
           echo ""
           echo "✅ Checking specific labels:"
@@ -79,14 +99,14 @@ jobs:
           if [[ "$TITLE" == "Test Application" ]]; then
             echo "✅ Title label verified"
           else
-            echo "❌ Title label missing or incorrect"
+            echo "❌ Title label missing or incorrect: '$TITLE'"
             exit 1
           fi
           
           if [[ "$VERSION" == "1.0.0" ]]; then
             echo "✅ Version label verified"
           else
-            echo "❌ Version label missing or incorrect"
+            echo "❌ Version label missing or incorrect: '$VERSION'"
             exit 1
           fi
 
@@ -99,29 +119,34 @@ jobs:
           echo "📋 Checking build args that were set as ENV in Dockerfile:"
           
           # Check if NODE_ENV was set
-          NODE_ENV=$(docker run --rm "$IMAGE_NAME" printenv NODE_ENV || echo "not_set")
+          NODE_ENV=$(docker run --rm "$IMAGE_NAME" printenv NODE_ENV 2>/dev/null || echo "not_set")
           echo "NODE_ENV: $NODE_ENV"
           
           # Check if VERSION was set
-          VERSION=$(docker run --rm "$IMAGE_NAME" printenv VERSION || echo "not_set")
+          VERSION=$(docker run --rm "$IMAGE_NAME" printenv VERSION 2>/dev/null || echo "not_set")
           echo "VERSION: $VERSION"
           
           # Check custom arg
-          CUSTOM_ARG=$(docker run --rm "$IMAGE_NAME" printenv CUSTOM_ARG || echo "not_set")
+          CUSTOM_ARG=$(docker run --rm "$IMAGE_NAME" printenv CUSTOM_ARG 2>/dev/null || echo "not_set")
           echo "CUSTOM_ARG: $CUSTOM_ARG"
+          
+          # Show all environment variables
+          echo ""
+          echo "📋 All Environment Variables:"
+          docker run --rm "$IMAGE_NAME" env | sort
 
       - name: Verify Build Args via File Check
         run: |
           echo "🔍 Verifying build arguments via build-time files..."
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
           
-          # If your Dockerfile creates files with build arg values, check them
-          # Example: RUN echo "$VERSION" > /app/version.txt
-          
           echo "📋 Checking build-time generated files:"
           
           # Check if build created any verification files
-          docker run --rm "$IMAGE_NAME" find /app -name "*.txt" -exec cat {} \; 2>/dev/null || echo "No verification files found"
+          docker run --rm "$IMAGE_NAME" find /app -name "*.txt" -exec cat {} \; 2>/dev/null || echo "No verification files found in /app"
+          
+          # Try other common locations
+          docker run --rm "$IMAGE_NAME" find / -maxdepth 2 -name "build-info*" -o -name "version*" 2>/dev/null || echo "No build info files found"
 
       - name: Comprehensive Image Analysis
         run: |
@@ -138,10 +163,10 @@ jobs:
           docker inspect "$IMAGE_NAME" --format='{{json .Config}}' | jq -r '
             "Architecture: " + .Architecture,
             "OS: " + .Os,
-            "Working Directory: " + .WorkingDir,
-            "User: " + .User,
-            "Entry Point: " + (.Entrypoint | tostring),
-            "Command: " + (.Cmd | tostring)
+            "Working Directory: " + (.WorkingDir // "not set"),
+            "User: " + (.User // "not set"),
+            "Entry Point: " + (.Entrypoint // [] | tostring),
+            "Command: " + (.Cmd // [] | tostring)
           '
           
           echo ""
@@ -154,7 +179,7 @@ jobs:
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
           
           # If your Dockerfile handles the multi-line arg, verify it
-          MULTI_LINE=$(docker run --rm "$IMAGE_NAME" printenv MULTI_LINE_ARG || echo "not_set")
+          MULTI_LINE=$(docker run --rm "$IMAGE_NAME" printenv MULTI_LINE_ARG 2>/dev/null || echo "not_set")
           echo "MULTI_LINE_ARG: $MULTI_LINE"
           
           # Check if newlines were preserved
@@ -162,7 +187,19 @@ jobs:
             echo "✅ Multi-line argument preserves newlines"
           else
             echo "⚠️ Multi-line argument may not preserve newlines correctly"
+            echo "Raw value: '$MULTI_LINE'"
           fi
+
+      - name: Check Build Command in Previous Step
+        run: |
+          echo "🔍 Checking if labels were included in build command..."
+          echo "Look for '--label' flags in the build step logs above."
+          echo "If you don't see '--label' flags, the action didn't process your labels."
+          echo ""
+          echo "Expected to see:"
+          echo "  --label org.opencontainers.image.title=Test Application"
+          echo "  --label maintainer=test@company.com"
+          echo "  etc."
 
       - name: Generate Verification Report
         run: |
@@ -179,7 +216,12 @@ jobs:
           
           echo "## Labels Verification" >> verification_report.md
           echo "\`\`\`" >> verification_report.md
-          docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | "\(.key)=\(.value)"' | sort >> verification_report.md
+          LABELS_JSON=$(docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}')
+          if [[ "$LABELS_JSON" == "null" || "$LABELS_JSON" == "{}" ]]; then
+            echo "NO LABELS FOUND!" >> verification_report.md
+          else
+            echo "$LABELS_JSON" | jq -r 'to_entries[] | "\(.key)=\(.value)"' | sort >> verification_report.md
+          fi
           echo "\`\`\`" >> verification_report.md
           echo "" >> verification_report.md
           
@@ -195,5 +237,5 @@ jobs:
       - name: Upload Verification Report
         uses: actions/upload-artifact@v4
         with:
-          name: image-verification-report
+          name: image-verification-report-${{ github.sha }}
           path: verification_report.md
