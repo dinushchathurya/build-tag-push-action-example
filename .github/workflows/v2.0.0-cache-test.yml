@@ -1,4 +1,4 @@
-name: Docker Build and Push
+name: Docker Build and Push - Cache Testing
 
 on: 
   push: 
@@ -6,30 +6,15 @@ on:
       - '.github/workflows/v2.0.0-cache-test.yml'
 
 jobs:
-  docker-login-build-tag-push:
+  # GitHub Actions Cache Test
+  gha-cache-test:
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        cache_test:
-          - name: gha-cache
-            cache_from: type=gha
-            cache_to: type=gha,mode=max
-          - name: registry-cache
-            cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-cache:cache
-            cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_PASSWORD }}/test-cache:cache,mode=max
-          - name: multi-cache
-            cache_from: |
-              type=gha
-              type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
-            cache_to: |
-              type=gha,mode=max
-              type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
-    name: Docker Login, Build, Tag & Push to DockerHub
+    name: Test GHA Cache
     steps:
       - name: Checkout
         uses: actions/checkout@v3
       
-      - name: Build, Tag & Publish Image to DockerHub
+      - name: Build with GitHub Actions Cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
@@ -38,8 +23,127 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: build-push-tag-action
-          tag: ${{ github.sha }}
-          cache_from: ${{ matrix.cache_test.cache_from }}
-          cache_to: ${{ matrix.cache_test.cache_to }}
+          tag: gha-cache-${{ github.sha }}
+          cache_from: type=gha
+          cache_to: type=gha,mode=max
+          labels: |
+            cache.test.type=gha-cache
+            org.opencontainers.image.title=GHA Cache Test
 
-     
+  # Registry Cache Test
+  registry-cache-test:
+    runs-on: ubuntu-latest
+    name: Test Registry Cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Build with Registry Cache
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: build-push-tag-action
+          tag: registry-cache-${{ github.sha }}
+          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
+          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
+          labels: |
+            cache.test.type=registry-cache
+            org.opencontainers.image.title=Registry Cache Test
+
+  # Multi-Cache Test
+  multi-cache-test:
+    runs-on: ubuntu-latest
+    name: Test Multi Cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Build with Multiple Cache Sources
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: build-push-tag-action
+          tag: multi-cache-${{ github.sha }}
+          cache_from: |
+            type=gha
+            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
+          cache_to: |
+            type=gha,mode=max
+            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
+          labels: |
+            cache.test.type=multi-cache
+            org.opencontainers.image.title=Multi Cache Test
+
+  # No Cache Test (for comparison)
+  no-cache-test:
+    runs-on: ubuntu-latest
+    name: Test No Cache
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Build without Cache
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: build-push-tag-action
+          tag: no-cache-${{ github.sha }}
+          no_cache: true
+          labels: |
+            cache.test.type=no-cache
+            org.opencontainers.image.title=No Cache Test
+
+  # Verification Job (runs after all cache tests)
+  verify-cache-tests:
+    runs-on: ubuntu-latest
+    name: Verify All Cache Tests
+    needs: [gha-cache-test, registry-cache-test, multi-cache-test, no-cache-test]
+    steps:
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+
+      - name: Verify All Cache Test Images
+        run: |
+          echo "🔍 Verifying all cache test images..."
+          
+          IMAGES=(
+            "gha-cache-${{ github.sha }}"
+            "registry-cache-${{ github.sha }}"
+            "multi-cache-${{ github.sha }}"
+            "no-cache-${{ github.sha }}"
+          )
+          
+          for tag in "${IMAGES[@]}"; do
+            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:$tag"
+            echo ""
+            echo "📦 Checking $tag:"
+            
+            docker pull "$IMAGE_NAME"
+            
+            SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+            CREATED=$(docker inspect "$IMAGE_NAME" --format='{{.Created}}')
+            CACHE_TYPE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "cache.test.type"}}')
+            
+            echo "  Size: $SIZE"
+            echo "  Created: $CREATED"
+            echo "  Cache Type: $CACHE_TYPE"
+            echo "  ✅ Verified"
+          done
+          
+          echo ""
+          echo "🎉 All cache test images verified successfully!"
