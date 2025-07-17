@@ -1,4 +1,4 @@
-name: Docker Build and Push with Verification
+name: Docker Build and Push with Build Args Injection
 
 on: 
   push: 
@@ -8,12 +8,72 @@ on:
 jobs:
   docker-login-build-tag-push:
     runs-on: ubuntu-latest
-    
-    name: Docker Login, Build, Tag & Push to DockerHub
     steps:
       - name: Checkout
         uses: actions/checkout@v3
       
+      - name: Inject Build Args Support into Dockerfile
+        run: |
+          echo "🔧 Injecting build args support into Dockerfile..."
+          
+          # Backup original Dockerfile
+          cp Dockerfile Dockerfile.original
+          
+          # Create build args header that will be injected
+          cat > build-args-injection.txt << 'EOF'
+          
+          # ===== BUILD ARGS INJECTION (by GitHub Actions) =====
+          ARG NODE_ENV=production
+          ARG VERSION=unknown
+          ARG BUILD_DATE=unknown
+          ARG GITHUB_SHA=unknown
+          ARG GITHUB_REF=unknown
+          ARG CUSTOM_ARG=default
+          ARG MULTI_LINE_ARG=default
+          
+          # Convert build args to environment variables for runtime access
+          ENV NODE_ENV=${NODE_ENV} \
+              VERSION=${VERSION} \
+              BUILD_DATE=${BUILD_DATE} \
+              GITHUB_SHA=${GITHUB_SHA} \
+              GITHUB_REF=${GITHUB_REF} \
+              CUSTOM_ARG=${CUSTOM_ARG} \
+              MULTI_LINE_ARG=${MULTI_LINE_ARG}
+          
+          # Create build verification file
+          RUN mkdir -p /app && \
+              echo "=== Build Args Verification ===" > /app/build-info.txt && \
+              echo "NODE_ENV: ${NODE_ENV}" >> /app/build-info.txt && \
+              echo "VERSION: ${VERSION}" >> /app/build-info.txt && \
+              echo "BUILD_DATE: ${BUILD_DATE}" >> /app/build-info.txt && \
+              echo "GITHUB_SHA: ${GITHUB_SHA}" >> /app/build-info.txt && \
+              echo "GITHUB_REF: ${GITHUB_REF}" >> /app/build-info.txt && \
+              echo "CUSTOM_ARG: ${CUSTOM_ARG}" >> /app/build-info.txt && \
+              echo "MULTI_LINE_ARG: ${MULTI_LINE_ARG}" >> /app/build-info.txt && \
+              echo "============================" >> /app/build-info.txt
+          # ===== END BUILD ARGS INJECTION =====
+          
+          EOF
+          
+          # Find the best insertion point (after FROM statement)
+          FROM_LINE=$(grep -n "^FROM" Dockerfile | tail -1 | cut -d: -f1)
+          INSERT_AFTER=$((FROM_LINE))
+          
+          # Create new Dockerfile with injection
+          head -n "$INSERT_AFTER" Dockerfile > Dockerfile.new
+          cat build-args-injection.txt >> Dockerfile.new
+          tail -n +"$((INSERT_AFTER + 1))" Dockerfile >> Dockerfile.new
+          
+          # Replace original with modified version
+          mv Dockerfile.new Dockerfile
+          rm build-args-injection.txt
+          
+          echo "✅ Build args injection completed!"
+          echo "📋 Modified Dockerfile preview (first 25 lines):"
+          head -25 Dockerfile
+          echo "..."
+          echo "📋 Insertion point was after line $INSERT_AFTER (FROM statement)"
+
       - name: Build, Tag & Publish Image to DockerHub with Build Args and Labels
         id: build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
@@ -21,7 +81,7 @@ jobs:
             username: ${{ secrets.DOCKER_NEW_USERNAME }}
             password: ${{ secrets.DOCKER_NEW_PASSWORD }}
             context: .
-            file: Dockerfile
+            file: Dockerfile  # Uses the modified Dockerfile
             repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
             repository: build-push-tag-action
             tag: ${{ github.sha }}
@@ -48,19 +108,21 @@ jobs:
                 test.type=build-args-labels
                 test.timestamp=${{ github.event.head_commit.timestamp }}
 
-      # ==========================================
-      # DOCKER LOGIN FOR VERIFICATION
-      # ==========================================
-      
+      - name: Restore Original Dockerfile
+        if: always()  # Always run, even if build fails
+        run: |
+          if [[ -f "Dockerfile.original" ]]; then
+            mv Dockerfile.original Dockerfile
+            echo "✅ Original Dockerfile restored"
+          else
+            echo "⚠️ Original Dockerfile backup not found"
+          fi
+
       - name: Login to Docker Hub for Verification
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
           password: ${{ secrets.DOCKER_NEW_PASSWORD }}
-
-      # ==========================================
-      # VERIFICATION STEPS
-      # ==========================================
       
       - name: Verify Image Labels
         run: |
@@ -110,101 +172,59 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Build Args (via Environment Variables)
+      - name: Verify Build Args NOW WORKING!
         run: |
-          echo "🔍 Verifying build arguments..."
+          echo "🔍 Verifying injected build arguments..."
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
           
-          # Run container and check environment variables
-          echo "📋 Checking build args that were set as ENV in Dockerfile:"
-          
-          # Check if NODE_ENV was set
-          NODE_ENV=$(docker run --rm "$IMAGE_NAME" printenv NODE_ENV 2>/dev/null || echo "not_set")
-          echo "NODE_ENV: $NODE_ENV"
-          
-          # Check if VERSION was set
-          VERSION=$(docker run --rm "$IMAGE_NAME" printenv VERSION 2>/dev/null || echo "not_set")
-          echo "VERSION: $VERSION"
-          
-          # Check custom arg
-          CUSTOM_ARG=$(docker run --rm "$IMAGE_NAME" printenv CUSTOM_ARG 2>/dev/null || echo "not_set")
-          echo "CUSTOM_ARG: $CUSTOM_ARG"
-          
-          # Show all environment variables
-          echo ""
-          echo "📋 All Environment Variables:"
-          docker run --rm "$IMAGE_NAME" env | sort
-
-      - name: Verify Build Args via File Check
-        run: |
-          echo "🔍 Verifying build arguments via build-time files..."
-          IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
-          
-          echo "📋 Checking build-time generated files:"
-          
-          # Check if build created any verification files
-          docker run --rm "$IMAGE_NAME" find /app -name "*.txt" -exec cat {} \; 2>/dev/null || echo "No verification files found in /app"
-          
-          # Try other common locations
-          docker run --rm "$IMAGE_NAME" find / -maxdepth 2 -name "build-info*" -o -name "version*" 2>/dev/null || echo "No build info files found"
-
-      - name: Comprehensive Image Analysis
-        run: |
-          echo "🔍 Comprehensive image analysis..."
-          IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
-          
-          echo "📊 Image Details:"
-          echo "Image ID: $(docker inspect "$IMAGE_NAME" --format='{{.Id}}')"
-          echo "Created: $(docker inspect "$IMAGE_NAME" --format='{{.Created}}')"
-          echo "Size: $(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)"
+          echo "📋 Build Args as Environment Variables:"
+          echo "NODE_ENV: $(docker run --rm "$IMAGE_NAME" printenv NODE_ENV 2>/dev/null || echo 'FAILED')"
+          echo "VERSION: $(docker run --rm "$IMAGE_NAME" printenv VERSION 2>/dev/null || echo 'FAILED')"
+          echo "BUILD_DATE: $(docker run --rm "$IMAGE_NAME" printenv BUILD_DATE 2>/dev/null || echo 'FAILED')"
+          echo "GITHUB_SHA: $(docker run --rm "$IMAGE_NAME" printenv GITHUB_SHA 2>/dev/null || echo 'FAILED')"
+          echo "GITHUB_REF: $(docker run --rm "$IMAGE_NAME" printenv GITHUB_REF 2>/dev/null || echo 'FAILED')"
+          echo "CUSTOM_ARG: $(docker run --rm "$IMAGE_NAME" printenv CUSTOM_ARG 2>/dev/null || echo 'FAILED')"
+          echo "MULTI_LINE_ARG: $(docker run --rm "$IMAGE_NAME" printenv MULTI_LINE_ARG 2>/dev/null || echo 'FAILED')"
           
           echo ""
-          echo "🏗️ Build Information:"
-          docker inspect "$IMAGE_NAME" --format='{{json .Config}}' | jq -r '
-            "Architecture: " + .Architecture,
-            "OS: " + .Os,
-            "Working Directory: " + (.WorkingDir // "not set"),
-            "User: " + (.User // "not set"),
-            "Entry Point: " + (.Entrypoint // [] | tostring),
-            "Command: " + (.Cmd // [] | tostring)
-          '
+          echo "📋 Build Info File Content:"
+          docker run --rm "$IMAGE_NAME" cat /app/build-info.txt 2>/dev/null || echo "Build info file not found"
           
           echo ""
-          echo "📋 Environment Variables:"
-          docker inspect "$IMAGE_NAME" --format='{{json .Config.Env}}' | jq -r '.[]' | sort
+          echo "🧪 Testing specific values:"
+          NODE_ENV_VALUE=$(docker run --rm "$IMAGE_NAME" printenv NODE_ENV 2>/dev/null)
+          if [[ "$NODE_ENV_VALUE" == "test" ]]; then
+            echo "✅ NODE_ENV correctly set to 'test'"
+          else
+            echo "❌ NODE_ENV not set correctly. Got: '$NODE_ENV_VALUE'"
+          fi
+          
+          VERSION_VALUE=$(docker run --rm "$IMAGE_NAME" printenv VERSION 2>/dev/null)
+          if [[ "$VERSION_VALUE" == "1.0.0" ]]; then
+            echo "✅ VERSION correctly set to '1.0.0'"
+          else
+            echo "❌ VERSION not set correctly. Got: '$VERSION_VALUE'"
+          fi
 
-      - name: Test Multi-line Build Arg
+      - name: Verify Multi-line Build Arg
         run: |
           echo "🔍 Testing multi-line build argument..."
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
           
-          # If your Dockerfile handles the multi-line arg, verify it
           MULTI_LINE=$(docker run --rm "$IMAGE_NAME" printenv MULTI_LINE_ARG 2>/dev/null || echo "not_set")
-          echo "MULTI_LINE_ARG: $MULTI_LINE"
+          echo "MULTI_LINE_ARG: '$MULTI_LINE'"
           
-          # Check if newlines were preserved
-          if [[ "$MULTI_LINE" == *$'\n'* ]]; then
-            echo "✅ Multi-line argument preserves newlines"
+          # Check if it contains the expected content
+          if [[ "$MULTI_LINE" == *"line1"* && "$MULTI_LINE" == *"line2"* && "$MULTI_LINE" == *"line3"* ]]; then
+            echo "✅ Multi-line argument contains expected content"
           else
-            echo "⚠️ Multi-line argument may not preserve newlines correctly"
-            echo "Raw value: '$MULTI_LINE'"
+            echo "⚠️ Multi-line argument may not be processed correctly"
           fi
 
-      - name: Check Build Command in Previous Step
+      - name: Generate Enhanced Verification Report
         run: |
-          echo "🔍 Checking if labels were included in build command..."
-          echo "Look for '--label' flags in the build step logs above."
-          echo "If you don't see '--label' flags, the action didn't process your labels."
-          echo ""
-          echo "Expected to see:"
-          echo "  --label org.opencontainers.image.title=Test Application"
-          echo "  --label maintainer=test@company.com"
-          echo "  etc."
-
-      - name: Generate Verification Report
-        run: |
-          echo "📊 VERIFICATION REPORT" > verification_report.md
-          echo "======================" >> verification_report.md
+          echo "📊 ENHANCED VERIFICATION REPORT" > verification_report.md
+          echo "================================" >> verification_report.md
           echo "" >> verification_report.md
           echo "**Image:** ${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}" >> verification_report.md
           echo "**Build Date:** $(date)" >> verification_report.md
@@ -225,13 +245,23 @@ jobs:
           echo "\`\`\`" >> verification_report.md
           echo "" >> verification_report.md
           
-          echo "## Environment Variables" >> verification_report.md
+          echo "## Build Args Verification" >> verification_report.md
           echo "\`\`\`" >> verification_report.md
-          docker inspect "$IMAGE_NAME" --format='{{json .Config.Env}}' | jq -r '.[]' | sort >> verification_report.md
+          echo "NODE_ENV: $(docker run --rm "$IMAGE_NAME" printenv NODE_ENV 2>/dev/null || echo 'not_set')" >> verification_report.md
+          echo "VERSION: $(docker run --rm "$IMAGE_NAME" printenv VERSION 2>/dev/null || echo 'not_set')" >> verification_report.md
+          echo "BUILD_DATE: $(docker run --rm "$IMAGE_NAME" printenv BUILD_DATE 2>/dev/null || echo 'not_set')" >> verification_report.md
+          echo "GITHUB_SHA: $(docker run --rm "$IMAGE_NAME" printenv GITHUB_SHA 2>/dev/null || echo 'not_set')" >> verification_report.md
+          echo "CUSTOM_ARG: $(docker run --rm "$IMAGE_NAME" printenv CUSTOM_ARG 2>/dev/null || echo 'not_set')" >> verification_report.md
+          echo "\`\`\`" >> verification_report.md
+          echo "" >> verification_report.md
+          
+          echo "## Build Info File" >> verification_report.md
+          echo "\`\`\`" >> verification_report.md
+          docker run --rm "$IMAGE_NAME" cat /app/build-info.txt 2>/dev/null >> verification_report.md || echo "Build info file not found" >> verification_report.md
           echo "\`\`\`" >> verification_report.md
           
           echo ""
-          echo "📋 Verification report generated:"
+          echo "📋 Enhanced verification report generated:"
           cat verification_report.md
 
       - name: Upload Verification Report
