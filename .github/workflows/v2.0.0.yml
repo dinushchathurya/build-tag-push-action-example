@@ -34,6 +34,7 @@ jobs:
           repoOwner: ${{ github.actor }}
           repository:  nodejs-github
           tag: 1.0.0
+          registry: ghcr.io
           platforms: linux/amd64,linux/arm64  
 
 
