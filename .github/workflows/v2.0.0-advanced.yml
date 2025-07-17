@@ -1,4 +1,4 @@
-name: Docker Build and Push with Build Args Injection
+name: Docker Build and Push with Advanced Options
 
 on: 
   push: 
@@ -18,7 +18,7 @@ jobs:
             username: ${{ secrets.DOCKER_NEW_USERNAME }}
             password: ${{ secrets.DOCKER_NEW_PASSWORD }}
             context: .
-            file: Dockerfile  # Uses the modified Dockerfile
+            file: Dockerfile  
             repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
             repository: build-push-tag-action
             tag: ${{ github.sha }}
