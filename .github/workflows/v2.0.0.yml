@@ -55,6 +55,6 @@ jobs:
           labels: |
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
-            "annotations": { "org.opencontainers.image.description": "Test" }
-
-
+          annotations: |
+            org.opencontainers.image.authors=${{ github.actor }}
+            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
