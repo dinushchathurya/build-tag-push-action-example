@@ -18,6 +18,9 @@ on:
       - '.github/workflows/4-v2.0.0-cache-test.yml'
 
 jobs:
+  # ==========================================
+  # Build without Cache
+  # ==========================================
   no-cache-build:
     if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'no-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
@@ -36,14 +39,17 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_USERNAME }}
-          repository: test-no-cache
+          repository: build-push-tag-action
           tag: no-cache-${{ github.run_number }}
           platforms: linux/amd64
           no_cache: true
           labels: |
             cache.strategy=none
             test.type=no-cache
-
+  
+  # ==========================================
+  # Build with GitHub Actions Cache
+  # ==========================================
   gha-cache-build:
     if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'gha-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
@@ -53,7 +59,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "⚡ Build with GitHub Actions Cache"
+      - name: "Build with GitHub Actions Cache"
         id: build_gha_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
@@ -62,7 +68,7 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_USERNAME }}
-          repository: test-gha-cache
+          repository: build-push-tag-action
           tag: gha-cache-${{ github.run_number }}
           platforms: linux/amd64,linux/arm64
           cache_from: type=gha
@@ -71,7 +77,10 @@ jobs:
             cache.strategy=github-actions
             cache.enabled=true
             test.type=gha-cache
-
+  
+  # ==========================================
+  # Build with Registry Cache
+  # ==========================================
   registry-cache-build:
     if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'registry-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
@@ -90,16 +99,19 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_USERNAME }}
-          repository: test-registry-cache
+          repository: build-push-tag-action
           tag: registry-cache-${{ github.run_number }}
           platforms: linux/amd64
-          cache_from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-registry-cache:cache
-          cache_to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-registry-cache:cache,mode=max
+          cache_from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/build-push-tag-action:cache
+          cache_to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/build-push-tag-action:cache,mode=max
           labels: |
             cache.strategy=registry
             cache.enabled=true
             test.type=registry-cache
-
+  
+  # ==========================================
+  # Combined Cache Build
+  # ==========================================
   combined-cache-build:
     if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
@@ -109,7 +121,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "🔄 Build with Combined Cache"
+      - name: "Build with Combined Cache"
         id: build_combined_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
@@ -118,15 +130,15 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_USERNAME }}
-          repository: test-combined-cache
+          repository: build-push-tag-action
           tag: combined-${{ github.run_number }}
           platforms: linux/amd64
           cache_from: |
             type=gha
-            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-combined-cache:cache
+            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/build-push-tag-action:cache
           cache_to: |
             type=gha,mode=max
-            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-combined-cache:cache,mode=max
+            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/build-push-tag-action:cache,mode=max
           labels: |
             cache.strategy=combined
             cache.sources=gha,registry
