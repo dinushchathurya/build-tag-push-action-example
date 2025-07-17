@@ -20,7 +20,7 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository:  build-push-tag-action
-          tag: 1.0.0
+          tag: ${{ github.sha }}
           platforms: linux/amd64,linux/arm64,linux/arm/v7  
     
       # Push to GitHub Container Registry
