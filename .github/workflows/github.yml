@@ -11,7 +11,7 @@ jobs:
         uses: dinushchathurya/build-tag-push-action@v1.2.1
         with:
           username: ${{ github.actor }}
-          password: ${{ secrets.TOKEN }}
+          password: ${{ secrets.GIT_TOKEN }}
           context: .
           file: Dockerfile
           repoOwner: ${{ github.actor }}
