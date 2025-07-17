@@ -39,9 +39,7 @@ jobs:
           tag: ${{ github.sha }}
           registry: ghcr.io
           platforms: linux/amd64,linux/arm64,linux/arm/v7
-          labels: |
-            org.opencontainers.image.description=Build and push Docker images to DockerHub and GitHub Container Registry
-            org.opencontainers.image.vendor=Open Source Sri Lanka
+          
       
       # Login to GitHub Container Registry with caching
       - name: Login to GitHub Container Registry with Cache
@@ -58,6 +56,4 @@ jobs:
           platforms: linux/amd64,linux/arm64,linux/arm/v7
           cache_from: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache
           cache_to: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache,mode=max
-          labels: |
-            org.opencontainers.image.description=Build and push Docker images to DockerHub and GitHub Container Registry
-            org.opencontainers.image.vendor=Open Source Sri Lanka
+          
