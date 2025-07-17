@@ -53,8 +53,5 @@ jobs:
           cache_from: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache
           cache_to: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache,mode=max
           labels: |
-            org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-          annotations: |
-            org.opencontainers.image.authors=${{ github.actor }}
-            org.opencontainers.image.url=${{ github.server_url }}/${{ github.repository }}
+            oorg.opencontainers.image.description =Build and push Docker images to DockerHub and GitHub Container Registry
+            org.opencontainers.image.vendor=Open Source Sri Lanka
