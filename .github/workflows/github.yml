@@ -18,5 +18,3 @@ jobs:
           repository: nodejs-github
           tag: 1.0.0
           registry: ghcr.io
-
-          
