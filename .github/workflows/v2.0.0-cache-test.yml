@@ -1,415 +1,133 @@
-name: Docker Build with Cache Testing (Enhanced)
+name: 05 - Cache Testing
 
-on: 
-  push: 
-    paths:
-      - '.github/workflows/v2.0.0-cache-test.yml'
-  pull_request:
-    branches: [main]
+on:
   workflow_dispatch:
     inputs:
-      test_type:
-        description: 'Cache test type to run'
+      cache_type:
+        description: 'Cache type to test'
         required: false
         default: 'all'
         type: choice
         options:
           - all
-          - simple
           - gha-cache
           - registry-cache
-          - multiplatform
-          - combined
-
-env:
-  IMAGE_NAME: build-push-tag-action
-  REGISTRY: docker.io
+          - no-cache
+  push:
+    paths:
+      - '.github/workflows/v2.0.0-cache-test.yml'
 
 jobs:
-  # =============================================
-  # SIMPLE BUILD (No Cache Dependencies)
-  # =============================================
-  simple-build:
+  no-cache-build:
+    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'no-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
-    name: 🔧 Simple Build (No Cache)
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'simple' || github.event.inputs.test_type == ''
-    outputs:
-      image_tag: simple-${{ github.sha }}
-      build_status: ${{ steps.build.outcome }}
-      
+    name: Build Without Cache
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Simple Build
-        id: build
+        
+      - name: "🔧 Build Without Cache"
+        id: build_no_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: ${{ env.IMAGE_NAME }}
-          tag: simple-${{ github.sha }}
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-no-cache
+          tag: no-cache-${{ github.run_number }}
           platforms: linux/amd64
-          build_args: |
-            NODE_ENV=test
-            VERSION=1.0.0
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GITHUB_SHA=${{ github.sha }}
-            GITHUB_REF=${{ github.ref }}
-            CACHE_STRATEGY=simple-no-cache
+          no_cache: true
           labels: |
-            cache.test.type=simple-no-cache
             cache.strategy=none
-            org.opencontainers.image.title=Simple Build Test
-            org.opencontainers.image.description=Basic build without cache dependencies
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            build.timestamp=${{ github.run_number }}
+            test.type=no-cache
 
-  # =============================================
-  # GITHUB ACTIONS CACHE BUILD
-  # =============================================
   gha-cache-build:
+    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'gha-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
-    name: ⚡ GitHub Actions Cache Test
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'gha-cache' || github.event.inputs.test_type == ''
-    continue-on-error: true  # Don't fail workflow if GitHub cache is down
-    outputs:
-      image_tag: gha-cache-${{ github.sha }}
-      build_status: ${{ steps.build.outcome }}
-      
+    name: GitHub Actions Cache
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Check GitHub Services Status
-        id: service_check
-        run: |
-          echo "🔍 Checking GitHub Actions Cache availability..."
-          
-          # Test GitHub API accessibility
-          if curl -s -f --max-time 10 "https://api.github.com/zen" > /dev/null 2>&1; then
-            echo "✅ GitHub API accessible"
-            echo "github_available=true" >> $GITHUB_OUTPUT
-          else
-            echo "⚠️ GitHub API may be experiencing issues"
-            echo "github_available=false" >> $GITHUB_OUTPUT
-          fi
-      
-      - name: Build with GHA Cache
-        id: build
-        if: steps.service_check.outputs.github_available == 'true'
+        
+      - name: "⚡ Build with GitHub Actions Cache"
+        id: build_gha_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: ${{ env.IMAGE_NAME }}
-          tag: gha-cache-${{ github.sha }}
-          platforms: linux/amd64
-          cache_from: type=gha
-          cache_to: type=gha,mode=max
-          build_args: |
-            NODE_ENV=test
-            VERSION=1.0.0
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GITHUB_SHA=${{ github.sha }}
-            GITHUB_REF=${{ github.ref }}
-            CACHE_STRATEGY=github-actions-cache
-          labels: |
-            cache.test.type=gha-cache
-            cache.strategy=github-actions
-            cache.enabled=true
-            org.opencontainers.image.title=GHA Cache Test
-            org.opencontainers.image.description=Build with GitHub Actions cache
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            build.timestamp=${{ github.run_number }}
-
-      - name: Skip Build (GitHub Services Down)
-        if: steps.service_check.outputs.github_available == 'false'
-        run: |
-          echo "⚠️ Skipping GHA cache build due to GitHub service issues"
-          echo "This is expected behavior when GitHub Actions cache is unavailable"
-
-  # =============================================
-  # REGISTRY CACHE BUILD
-  # =============================================
-  registry-cache-build:
-    runs-on: ubuntu-latest
-    name: 🏪 Registry Cache Test
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'registry-cache' || github.event.inputs.test_type == ''
-    continue-on-error: true
-    outputs:
-      image_tag: registry-cache-${{ github.sha }}
-      build_status: ${{ steps.build.outcome }}
-      
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Build with Registry Cache
-        id: build
-        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
-        with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
-          context: .
-          file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: ${{ env.IMAGE_NAME }}
-          tag: registry-cache-${{ github.sha }}
-          platforms: linux/amd64
-          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache
-          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache,mode=max
-          build_args: |
-            NODE_ENV=test
-            VERSION=1.0.0
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GITHUB_SHA=${{ github.sha }}
-            GITHUB_REF=${{ github.ref }}
-            CACHE_STRATEGY=registry-cache
-          labels: |
-            cache.test.type=registry-cache
-            cache.strategy=registry
-            cache.enabled=true
-            org.opencontainers.image.title=Registry Cache Test
-            org.opencontainers.image.description=Build with Docker registry cache
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            build.timestamp=${{ github.run_number }}
-
-  # =============================================
-  # MULTI-PLATFORM BUILD
-  # =============================================
-  multiplatform-build:
-    runs-on: ubuntu-latest
-    name: 🌐 Multi-platform Build Test
-    if: (github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'multiplatform' || github.event.inputs.test_type == '') && github.event_name != 'pull_request'
-    continue-on-error: true
-    outputs:
-      image_tag: multiplatform-${{ github.sha }}
-      build_status: ${{ steps.build.outcome }}
-      
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Multi-platform Build
-        id: build
-        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
-        with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
-          context: .
-          file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: ${{ env.IMAGE_NAME }}
-          tag: multiplatform-${{ github.sha }}
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-gha-cache
+          tag: gha-cache-${{ github.run_number }}
           platforms: linux/amd64,linux/arm64
           cache_from: type=gha
           cache_to: type=gha,mode=max
-          build_args: |
-            NODE_ENV=test
-            VERSION=1.0.0
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GITHUB_SHA=${{ github.sha }}
-            GITHUB_REF=${{ github.ref }}
-            CACHE_STRATEGY=multiplatform-gha-cache
           labels: |
-            cache.test.type=multiplatform-gha-cache
             cache.strategy=github-actions
             cache.enabled=true
-            build.platforms=linux/amd64,linux/arm64
-            org.opencontainers.image.title=Multi-platform with GHA Cache
-            org.opencontainers.image.description=Multi-architecture build with GitHub Actions cache
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            build.timestamp=${{ github.run_number }}
+            test.type=gha-cache
 
-  # =============================================
-  # COMBINED CACHE BUILD
-  # =============================================
-  combined-cache-build:
+  registry-cache-build:
+    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'registry-cache' || github.event.inputs.cache_type == ''
     runs-on: ubuntu-latest
-    name: 🔄 Combined Cache Test
-    if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'combined' || github.event.inputs.test_type == ''
-    continue-on-error: true
-    outputs:
-      image_tag: combined-cache-${{ github.sha }}
-      build_status: ${{ steps.build.outcome }}
-      
+    name: Registry Cache
+    
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      
-      - name: Build with Multiple Cache Sources
-        id: build
+        
+      - name: "🏪 Build with Registry Cache"
+        id: build_registry_cache
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: ${{ env.IMAGE_NAME }}
-          tag: combined-cache-${{ github.sha }}
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-registry-cache
+          tag: registry-cache-${{ github.run_number }}
+          platforms: linux/amd64
+          cache_from: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-registry-cache:cache
+          cache_to: type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-registry-cache:cache,mode=max
+          labels: |
+            cache.strategy=registry
+            cache.enabled=true
+            test.type=registry-cache
+
+  combined-cache-build:
+    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == ''
+    runs-on: ubuntu-latest
+    name: Combined Cache Sources
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🔄 Build with Combined Cache"
+        id: build_combined_cache
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-combined-cache
+          tag: combined-${{ github.run_number }}
           platforms: linux/amd64
           cache_from: |
             type=gha
-            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache
+            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-combined-cache:cache
           cache_to: |
             type=gha,mode=max
-            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache,mode=max
-          build_args: |
-            NODE_ENV=test
-            VERSION=1.0.0
-            BUILD_DATE=${{ github.event.head_commit.timestamp }}
-            GITHUB_SHA=${{ github.sha }}
-            GITHUB_REF=${{ github.ref }}
-            CACHE_STRATEGY=combined-cache
+            type=registry,ref=${{ secrets.DOCKER_USERNAME }}/test-combined-cache:cache,mode=max
           labels: |
-            cache.test.type=combined-cache
             cache.strategy=combined
-            cache.enabled=true
             cache.sources=gha,registry
-            org.opencontainers.image.title=Combined Cache Test
-            org.opencontainers.image.description=Build with multiple cache sources
-            org.opencontainers.image.source=https://github.com/${{ github.repository }}
-            org.opencontainers.image.revision=${{ github.sha }}
-            org.opencontainers.image.created=${{ github.event.head_commit.timestamp }}
-            build.timestamp=${{ github.run_number }}
-
-  # =============================================
-  # VERIFICATION AND REPORTING
-  # =============================================
-  verify-builds:
-    runs-on: ubuntu-latest
-    name: 📊 Verify All Builds
-    needs: [simple-build, gha-cache-build, registry-cache-build, multiplatform-build, combined-cache-build]
-    if: always()
-    
-    steps:
-      - name: Login to Docker Hub
-        uses: docker/login-action@v3
-        with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
-
-      - name: Verify All Built Images
-        run: |
-          echo "🔍 CACHE TESTING VERIFICATION REPORT"
-          echo "===================================="
-          echo ""
-          echo "**Workflow:** ${{ github.workflow }}"
-          echo "**Run ID:** ${{ github.run_id }}"
-          echo "**Trigger:** ${{ github.event_name }}"
-          echo "**Test Type:** ${{ github.event.inputs.test_type || 'all' }}"
-          echo "**Commit:** ${{ github.sha }}"
-          echo "**Date:** $(date -u)"
-          echo ""
-          
-          # Job results
-          SIMPLE_STATUS="${{ needs.simple-build.result }}"
-          GHA_STATUS="${{ needs.gha-cache-build.result }}"
-          REGISTRY_STATUS="${{ needs.registry-cache-build.result }}"
-          MULTIPLATFORM_STATUS="${{ needs.multiplatform-build.result }}"
-          COMBINED_STATUS="${{ needs.combined-cache-build.result }}"
-          
-          echo "## 📋 Build Results Summary"
-          echo "| Test Type | Status | Image Tag | Cache Strategy | Size | Notes |"
-          echo "|-----------|--------|-----------|----------------|------|-------|"
-          
-          # Verify each build
-          SUCCESS_COUNT=0
-          TOTAL_BUILDS=0
-          
-          # Simple Build
-          if [[ "$SIMPLE_STATUS" != "skipped" ]]; then
-            TOTAL_BUILDS=$((TOTAL_BUILDS + 1))
-            TAG="simple-${{ github.sha }}"
-            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:$TAG"
-            
-            if [[ "$SIMPLE_STATUS" == "success" ]] && docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
-              echo "| Simple (No Cache) | ✅ Success | \`$TAG\` | None | $SIZE | Baseline build |"
-            else
-              echo "| Simple (No Cache) | ❌ Failed | \`$TAG\` | None | - | Failed to build/pull |"
-            fi
-          fi
-          
-          # GHA Cache Build
-          if [[ "$GHA_STATUS" != "skipped" ]]; then
-            TOTAL_BUILDS=$((TOTAL_BUILDS + 1))
-            TAG="gha-cache-${{ github.sha }}"
-            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:$TAG"
-            
-            if [[ "$GHA_STATUS" == "success" ]] && docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
-              CACHE_ENABLED=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "cache.enabled"}}' 2>/dev/null || echo "unknown")
-              echo "| GitHub Actions Cache | ✅ Success | \`$TAG\` | GHA | $SIZE | Cache: $CACHE_ENABLED |"
-            else
-              if [[ "$GHA_STATUS" == "success" ]]; then
-                echo "| GitHub Actions Cache | ⚠️ Build OK, Pull Failed | \`$TAG\` | GHA | - | May be private/auth issue |"
-              else
-                echo "| GitHub Actions Cache | ❌ Failed | \`$TAG\` | GHA | - | Likely GitHub service issue |"
-              fi
-            fi
-          fi
-          
-          # Registry Cache Build
-          if [[ "$REGISTRY_STATUS" != "skipped" ]]; then
-            TOTAL_BUILDS=$((TOTAL_BUILDS + 1))
-            TAG="registry-cache-${{ github.sha }}"
-            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:$TAG"
-            
-            if [[ "$REGISTRY_STATUS" == "success" ]] && docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
-              echo "| Registry Cache | ✅ Success | \`$TAG\` | Registry | $SIZE | Docker Hub cache |"
-            else
-              echo "| Registry Cache | ❌ Failed | \`$TAG\` | Registry | - | Failed to build/pull |"
-            fi
-          fi
-          
-          # Multi-platform Build
-          if [[ "$MULTIPLATFORM_STATUS" != "skipped" ]]; then
-            TOTAL_BUILDS=$((TOTAL_BUILDS + 1))
-            TAG="multiplatform-${{ github.sha }}"
-            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:$TAG"
-            
-            if [[ "$MULTIPLATFORM_STATUS" == "success" ]]; then
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              # For multi-platform, check manifest instead of pulling
-              if docker manifest inspect "$IMAGE_NAME" >/dev/null 2>&1; then
-                PLATFORMS=$(docker manifest inspect "$IMAGE_NAME" | jq -r '.manifests | length')
-                echo "| Multi-platform | ✅ Success | \`$TAG\` | GHA | Multi-arch | $PLATFORMS platforms |"
-              else
-                echo "| Multi-platform | ⚠️ Manifest Issue | \`$TAG\` | GHA | - | Built but manifest unavailable |"
-              fi
-            else
-              echo "| Multi-platform | ❌ Failed | \`$TAG\` | GHA | - | Multi-platform build failed |"
-            fi
-          fi
-          
-          # Combined Cache Build
-          if [[ "$COMBINED_STATUS" != "skipped" ]]; then
-            TOTAL_BUILDS=$((TOTAL_BUILDS + 1))
-            TAG="combined-cache-${{ github.sha }}"
-            IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:$TAG"
-            
-            if [[ "$COMBINED_STATUS" == "success" ]] && docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-              SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
-              SOURCES=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "cache
+            test.type=combined-cache

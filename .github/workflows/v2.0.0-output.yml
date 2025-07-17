@@ -1,0 +1,154 @@
+name: 09 - Output Modes Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/v2.0.0-output.yml'
+
+jobs:
+  push-mode-test:
+    runs-on: ubuntu-latest
+    name: Push Mode Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "📤 Build and Push"
+        id: push_build
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-push-mode
+          tag: push-${{ github.run_number }}
+          push: true
+          load: false
+          labels: |
+            test.type=push-mode
+            output.mode=push
+            
+      - name: Display Push Results
+        run: |
+          echo "✅ Push mode completed!"
+          echo "Image URL: ${{ steps.push_build.outputs.image_url }}"
+          echo "Image ID: ${{ steps.push_build.outputs.imageid }}"
+          echo "Build Time: ${{ steps.push_build.outputs.build_time }}s"
+
+  load-mode-test:
+    runs-on: ubuntu-latest
+    name: Load Mode Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "📥 Build and Load to Docker Daemon"
+        id: load_build
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-load-mode
+          tag: load-${{ github.run_number }}
+          push: false
+          load: true
+          labels: |
+            test.type=load-mode
+            output.mode=load
+            
+      - name: Verify Image Loaded
+        run: |
+          echo "🔍 Verifying image was loaded into Docker daemon..."
+          IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-load-mode:load-${{ github.run_number }}"
+          
+          if docker images | grep -q "test-load-mode.*load-${{ github.run_number }}"; then
+            echo "✅ Image successfully loaded into Docker daemon"
+            echo "📋 Image details:"
+            docker images --filter "reference=$IMAGE_NAME" --format "table {{.Repository}}\t{{.Tag}}\t{{.Size}}\t{{.CreatedAt}}"
+          else
+            echo "❌ Image not found in Docker daemon"
+            exit 1
+          fi
+
+  custom-output-test:
+    runs-on: ubuntu-latest
+    name: Custom Output Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Create Output Directory
+        run: mkdir -p /tmp/docker-output
+        
+      - name: "💾 Build with Custom Output"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-custom-output
+          tag: output-${{ github.run_number }}
+          push: false
+          load: false
+          outputs: type=docker,dest=/tmp/docker-output/image.tar
+          labels: |
+            test.type=custom-output
+            output.mode=custom
+            
+      - name: Verify Custom Output
+        run: |
+          echo "🔍 Verifying custom output file..."
+          
+          if [[ -f "/tmp/docker-output/image.tar" ]]; then
+            echo "✅ Custom output file created successfully"
+            echo "📊 File size: $(du -h /tmp/docker-output/image.tar | cut -f1)"
+            echo "📋 File details:"
+            ls -la /tmp/docker-output/image.tar
+          else
+            echo "❌ Custom output file not found"
+            ls -la /tmp/docker-output/ || echo "Output directory doesn't exist"
+            exit 1
+          fi
+
+  build-only-test:
+    runs-on: ubuntu-latest
+    name: Build Only Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🔨 Build Only (No Push, No Load)"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-build-only
+          tag: build-only-${{ github.run_number }}
+          push: false
+          load: false
+          platforms: linux/amd64,linux/arm64
+          labels: |
+            test.type=build-only
+            output.mode=none
+            
+      - name: Verify Build Only
+        run: |
+          echo "✅ Build-only mode completed successfully!"
+          echo "📋 This mode builds the image for multiple platforms without pushing or loading"
+          echo "🌐 Platforms: linux/amd64,linux/arm64"
+          echo "⚠️ Image exists only in build cache, not in local daemon or registry"

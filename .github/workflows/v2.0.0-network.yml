@@ -1,0 +1,44 @@
+name: 08 - Network and Resources Test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/v2.0.0-network.yml'
+
+jobs:
+  network-host-test:
+    runs-on: ubuntu-latest
+    name: Host Network Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🌐 Build with Host Network"
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repository: test-network-host
+          tag: network-${{ github.run_number }}
+          
+          # Network configuration
+          network: host
+          
+          # Custom hosts
+          add_hosts: |
+            host.docker.internal:host-gateway
+            custom.local:127.0.0.1
+            api.internal:10.0.0.1
+            db.internal:10.0.0.2
+          
+          # Allow host network
+          allow: network.host
+          
+          labels: |
+            test.type=network-host
+            network.mode=host
