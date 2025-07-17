@@ -1,7 +1,7 @@
 on: 
   push: 
     paths:
-      - '.github/workflows/github.yml'
+      - '.github/workflows/0-github.yml'
 
 jobs:
   github-login-build-tag-push:

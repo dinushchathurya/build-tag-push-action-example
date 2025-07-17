@@ -1,4 +1,4 @@
-name: Enhanced Network and Resources Test
+name: 5- Docker Build and Push withEnhanced Network and Resources Test
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ on:
           - individual-tests
   push:
     paths:
-      - '.github/workflows/v2.0.0-network.yml'
+      - '.github/workflows/5-v2.0.0-network.yml'
 
 jobs:
   # ==========================================

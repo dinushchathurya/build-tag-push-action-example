@@ -1,7 +1,7 @@
 on: 
   push: 
     paths:
-      - '.github/workflows/docker.yml'
+      - '.github/workflows/0-docker.yml'
 
 jobs:
   docker-login-build-tag-push:
