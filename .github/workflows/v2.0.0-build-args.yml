@@ -172,7 +172,7 @@ jobs:
             exit 1
           fi
 
-      - name: Verify Build Args NOW WORKING!
+      - name: Verify Build Args
         run: |
           echo "🔍 Verifying injected build arguments..."
           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:${{ github.sha }}"
