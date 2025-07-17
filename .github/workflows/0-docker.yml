@@ -1,3 +1,5 @@
+name: 0-Docker Build and Push Basic Test DockerHub
+
 on: 
   push: 
     paths:
