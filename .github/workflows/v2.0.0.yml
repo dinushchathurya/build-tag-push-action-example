@@ -33,9 +33,12 @@ jobs:
           file: Dockerfile
           repoOwner: ${{ github.actor }}
           repository:  nodejs-github
-          tag: 1.0.0
+          tag: ${{ github.sha }}
           registry: ghcr.io
           platforms: linux/amd64,linux/arm64,linux/arm/v7
+          labels: |
+            oorg.opencontainers.image.description =Build and push Docker images to DockerHub and GitHub Container Registry
+            org.opencontainers.image.vendor=Open Source Sri Lanka
       
       #  Login to GitHub Container Registry
       - name: Login to GitHub Container Registry
