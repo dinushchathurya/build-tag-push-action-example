@@ -1,0 +1,39 @@
+name: Docker Build and Push
+
+on: 
+  push: 
+    paths:
+      - '.github/workflows/v2.0.0-multi-platform-docker.yml'
+
+jobs:
+  docker-login-build-tag-push:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        platform_test:
+          - name: single-amd64
+            platforms: linux/amd64
+          - name: single-arm64
+            platforms: linux/arm64
+          - name: multi-platform
+            platforms: linux/amd64,linux/arm64
+          - name: multi-with-arm
+            platforms: linux/amd64,linux/arm64,linux/arm/v7
+    name: Docker Login, Build, Tag & Push to DockerHub with ${{ matrix.platform_test.name }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Build, Tag & Publish Image to DockerHub
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: build-push-tag-action
+          tag: ${{ github.sha }}
+          platforms: ${{ matrix.platform_test.platforms }}
+  
+     

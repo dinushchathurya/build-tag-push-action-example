@@ -1,0 +1,59 @@
+name: Docker Build and Push
+
+on: 
+  push: 
+    paths:
+      - '.github/workflows/basic-docker.yml'
+
+jobs:
+  docker-login-build-tag-push:
+    runs-on: ubuntu-latest
+    
+    
+    name: Docker Login, Build, Tag & Push to DockerHub
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v3
+      
+      - name: Build, Tag & Publish Image to DockerHub
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: build-push-tag-action
+          tag: ${{ github.sha }}
+
+      # # Push to GitHub Container Registry
+      # - name: Login to GitHub Container Registry
+      #   uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+      #   with:
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GIT_TOKEN }}
+      #     context: .
+      #     file: Dockerfile
+      #     repoOwner: ${{ github.actor }}
+      #     repository: nodejs-github
+      #     tag: ${{ github.sha }}
+      #     registry: ghcr.io
+      #     platforms: linux/amd64,linux/arm64,linux/arm/v7
+          
+      
+      # # Login to GitHub Container Registry with caching
+      # - name: Login to GitHub Container Registry with Cache
+      #   uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+      #   with:
+      #     username: ${{ github.actor }}
+      #     password: ${{ secrets.GIT_TOKEN }}
+      #     context: .
+      #     file: Dockerfile
+      #     repoOwner: ${{ github.actor }}
+      #     repository: nodejs-github
+      #     tag: ${{ github.sha }}
+      #     registry: ghcr.io
+      #     platforms: linux/amd64,linux/arm64,linux/arm/v7
+      #     cache_from: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache
+      #     cache_to: type=registry,ref=ghcr.io/${{ github.actor }}/nodejs-github:cache,mode=max
+          
