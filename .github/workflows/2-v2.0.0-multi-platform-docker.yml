@@ -3,7 +3,7 @@ name: Docker Build and Push
 on: 
   push: 
     paths:
-      - '.github/workflows/v2.0.0-multi-platform-docker.yml'
+      - '.github/workflows/2-v2.0.0-multi-platform-docker.yml'
 
 jobs:
   docker-login-build-tag-push:

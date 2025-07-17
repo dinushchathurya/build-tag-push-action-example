@@ -3,7 +3,7 @@ name: Docker Build and Push with Build Args Injection
 on: 
   push: 
     paths:
-      - '.github/workflows/v2.0.0-build-args.yml'
+      - '.github/workflows/3-v2.0.0-build-args.yml'
 
 jobs:
   docker-login-build-tag-push:
