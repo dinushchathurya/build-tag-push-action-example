@@ -23,7 +23,7 @@ jobs:
           tag: 1.0.0
           platforms: linux/amd64,linux/arm64,linux/arm/v7  
     
-       # Push to GitHub Container Registry
+      # Push to GitHub Container Registry
       - name: Login to GitHub Container Registry
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
@@ -37,7 +37,7 @@ jobs:
           registry: ghcr.io
           platforms: linux/amd64,linux/arm64,linux/arm/v7
       
-            # Login to GitHub Container Registry
+      #  Login to GitHub Container Registry
       - name: Login to GitHub Container Registry
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
