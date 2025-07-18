@@ -38,38 +38,55 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: "🔍 Verify Provenance Attestation"
+      - name: "✅ Test Security Features"
         run: |
-          echo "Checking provenance attestation..."
-          cosign verify-attestation \
+          IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }}"
+          
+          echo "🔍 Testing image: $IMAGE_NAME"
+          
+          # Test 1: Check if provenance exists
+          echo "=== Testing Provenance ==="
+          if cosign verify-attestation \
             --type slsaprovenance \
             --certificate-identity-regexp=".*" \
             --certificate-oidc-issuer-regexp=".*" \
-            ${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }} || echo "Provenance verification failed"
-
-      - name: "📋 Verify SBOM Attestation"
-        run: |
-          echo "Checking SBOM attestation..."
-          cosign verify-attestation \
+            $IMAGE_NAME 2>/dev/null; then
+            echo "✅ Provenance attestation: PASS"
+          else
+            echo "❌ Provenance attestation: FAIL"
+            exit 1
+          fi
+          
+          # Test 2: Check if SBOM exists
+          echo "=== Testing SBOM ==="
+          if cosign verify-attestation \
             --type spdxjson \
             --certificate-identity-regexp=".*" \
             --certificate-oidc-issuer-regexp=".*" \
-            ${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }} || echo "SBOM verification failed"
-
-      - name: "📥 Download and Inspect Attestations"
-        run: |
-          echo "=== Downloading Provenance ==="
-          cosign download attestation \
-            --predicate-type slsaprovenance \
-            ${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }} \
-            > provenance.json
-          echo "Provenance attestation content:"
-          cat provenance.json | jq '.payload | @base64d | fromjson' || echo "Failed to parse provenance"
+            $IMAGE_NAME 2>/dev/null; then
+            echo "✅ SBOM attestation: PASS"
+          else
+            echo "❌ SBOM attestation: FAIL"
+            exit 1
+          fi
           
-          echo "=== Downloading SBOM ==="
-          cosign download attestation \
-            --predicate-type spdxjson \
-            ${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }} \
-            > sbom.json
-          echo "SBOM attestation content:"
-          cat sbom.json | jq '.payload | @base64d | fromjson' || echo "Failed to parse SBOM"
+          # Test 3: Download and inspect content
+          echo "=== Inspecting Attestation Content ==="
+          cosign download attestation --predicate-type slsaprovenance $IMAGE_NAME > provenance.json
+          cosign download attestation --predicate-type spdxjson $IMAGE_NAME > sbom.json
+          
+          echo "Provenance keys:"
+          cat provenance.json | jq -r '.payload | @base64d | fromjson | .predicate | keys[]' | head -5
+          
+          echo "SBOM package count:"
+          PACKAGE_COUNT=$(cat sbom.json | jq -r '.payload | @base64d | fromjson | .predicate.packages | length')
+          echo "Found $PACKAGE_COUNT packages"
+          
+          if [ "$PACKAGE_COUNT" -gt 0 ]; then
+            echo "✅ SBOM contains packages: PASS"
+          else
+            echo "❌ SBOM contains no packages: FAIL"
+            exit 1
+          fi
+          
+          echo "🎉 All security features verified successfully!"
