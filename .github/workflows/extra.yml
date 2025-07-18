@@ -1,0 +1,485 @@
+name: 6- Security Features Test Workflow
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/6-v2.0.0-security.yml'  
+
+jobs:
+  security-attestations:
+    runs-on: ubuntu-latest
+    name: Security Attestations Test
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: "🔒 Build with Security Features"
+        id: security_build
+        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+        with:
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+          context: .
+          file: Dockerfile
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+          repository: test-security
+          tag: security-${{ github.run_number }}
+          platforms: linux/amd64,linux/arm64
+          
+          # Security features
+          provenance: true
+          sbom: true
+          
+          # Use registry cache instead of GHA cache
+          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-security:cache
+          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-security:cache,mode=max
+          
+            
+  #     - name: "✅ Verify Security Build Success"
+  #       if: steps.security_build.outcome == 'success'
+  #       run: |
+  #         echo "🎉 SECURITY FEATURES BUILD SUCCESSFUL!"
+  #         echo "===================================="
+  #         echo "✅ Build Status: SUCCESS"
+  #         echo "✅ Image URL: ${{ steps.security_build.outputs.image_url }}"
+  #         echo "✅ Build Time: ${{ steps.security_build.outputs.build_time }}s"
+  #         echo "✅ Platforms: linux/amd64,linux/arm64"
+  #         echo "✅ Provenance: Enabled"
+  #         echo "✅ SBOM: Enabled"
+  #         echo "✅ Registry Cache: Used"
+          
+  #     - name: "❌ Security Build Failed"
+  #       if: steps.security_build.outcome == 'failure'
+  #       run: |
+  #         echo "❌ SECURITY FEATURES BUILD FAILED!"
+  #         echo "================================="
+  #         echo "❌ Build Status: FAILED"
+  #         echo "❌ Check the logs above for specific error details"
+  #         echo ""
+  #         echo "🔧 Common Issues:"
+  #         echo "- Multi-platform build complexity"
+  #         echo "- Security attestation generation failure"
+  #         echo "- Cache access issues"
+  #         exit 1
+
+  # secure-build-with-dockerfile-secrets:
+  #   runs-on: ubuntu-latest
+  #   name: Secure Build with Dockerfile Secrets
+    
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+        
+  #     - name: Inject Secrets Support into Dockerfile
+  #       run: |
+  #         echo "🔧 Injecting secrets support into Dockerfile..."
+          
+  #         # Backup original Dockerfile
+  #         cp Dockerfile Dockerfile.original
+          
+  #         # Create secrets injection header
+  #         cat > secrets-injection.txt << 'EOF'
+          
+  #         # ===== SECRETS INJECTION (by GitHub Actions) =====
+  #         # syntax=docker/dockerfile:1
+          
+  #         # Build-time secrets (not stored in final image)
+  #         # These secrets are only available during RUN instructions with --mount=type=secret
+          
+  #         EOF
+          
+  #         # Create secrets verification section
+  #         cat > secrets-verification.txt << 'EOF'
+          
+  #         # ===== SECRETS VERIFICATION SECTION =====
+  #         # This RUN instruction uses build secrets securely
+  #         RUN --mount=type=secret,id=api_key \
+  #             --mount=type=secret,id=db_password \
+  #             echo "🔐 Verifying build secrets..." && \
+  #             if [ -f /run/secrets/api_key ]; then \
+  #               echo "✅ API Key found (length: $(wc -c < /run/secrets/api_key) chars)" && \
+  #               echo "✅ API Key configured successfully" && \
+  #               echo "api_key_configured=true" > /tmp/secret_status; \
+  #             else \
+  #               echo "❌ No API key provided, using defaults" && \
+  #               echo "api_key_configured=false" > /tmp/secret_status; \
+  #             fi && \
+  #             if [ -f /run/secrets/db_password ]; then \
+  #               echo "✅ DB Password found (length: $(wc -c < /run/secrets/db_password) chars)" && \
+  #               echo "✅ DB Password configured successfully" && \
+  #               echo "db_password_configured=true" >> /tmp/secret_status; \
+  #             else \
+  #               echo "❌ No DB password provided, using defaults" && \
+  #               echo "db_password_configured=false" >> /tmp/secret_status; \
+  #             fi && \
+  #             echo "🔐 Secrets verification completed" && \
+  #             cat /tmp/secret_status
+          
+  #         # Create a build info file with secrets status (for verification)
+  #         RUN echo "=== Security Build Info ===" > /usr/src/app/security-build-info.txt && \
+  #             echo "Build completed at: $(date)" >> /usr/src/app/security-build-info.txt && \
+  #             echo "Secrets support: enabled" >> /usr/src/app/security-build-info.txt && \
+  #             echo "Dockerfile syntax: BuildKit" >> /usr/src/app/security-build-info.txt && \
+  #             if [ -f /tmp/secret_status ]; then \
+  #               echo "Secrets status:" >> /usr/src/app/security-build-info.txt && \
+  #               cat /tmp/secret_status >> /usr/src/app/security-build-info.txt; \
+  #             fi && \
+  #             echo "Security features: provenance,sbom,secrets" >> /usr/src/app/security-build-info.txt && \
+  #             echo "==========================" >> /usr/src/app/security-build-info.txt
+  #         # ===== END SECRETS INJECTION =====
+          
+  #         EOF
+          
+  #         # Find the best insertion point (after FROM statement)
+  #         FROM_LINE=$(grep -n "^FROM" Dockerfile | tail -1 | cut -d: -f1)
+  #         INSERT_AFTER=$((FROM_LINE))
+          
+  #         # Create new Dockerfile with secrets injection
+  #         head -n "$INSERT_AFTER" Dockerfile > Dockerfile.new
+  #         cat secrets-injection.txt >> Dockerfile.new
+  #         tail -n +"$((INSERT_AFTER + 1))" Dockerfile >> Dockerfile.new
+          
+  #         # Find insertion point for secrets verification (before the last COPY or CMD)
+  #         LAST_COPY_LINE=$(grep -n "^COPY\|^ADD" Dockerfile.new | tail -1 | cut -d: -f1)
+  #         if [ -z "$LAST_COPY_LINE" ]; then
+  #           # If no COPY found, insert before CMD/ENTRYPOINT
+  #           LAST_COPY_LINE=$(grep -n "^CMD\|^ENTRYPOINT" Dockerfile.new | head -1 | cut -d: -f1)
+  #           LAST_COPY_LINE=$((LAST_COPY_LINE - 1))
+  #         fi
+          
+  #         # Insert secrets verification after the app setup
+  #         head -n "$LAST_COPY_LINE" Dockerfile.new > Dockerfile.temp
+  #         cat secrets-verification.txt >> Dockerfile.temp
+  #         tail -n +"$((LAST_COPY_LINE + 1))" Dockerfile.new >> Dockerfile.temp
+          
+  #         # Replace original with modified version
+  #         mv Dockerfile.temp Dockerfile
+  #         rm secrets-injection.txt secrets-verification.txt
+          
+  #         echo "✅ Secrets injection completed!"
+  #         echo "📋 Modified Dockerfile preview:"
+  #         echo "================================"
+  #         cat Dockerfile
+  #         echo "================================"
+        
+  #     - name: Create Test Secrets in Workspace
+  #       run: |
+  #         mkdir -p ./secrets
+  #         echo "test-api-key-secure-12345" > ./secrets/api_key
+  #         echo "test-db-password-vault-67890" > ./secrets/db_password
+  #         chmod 600 ./secrets/*
+  #         echo "📁 Created secrets:"
+  #         ls -la ./secrets/
+  #         echo "🔐 API key preview: $(head -c 10 ./secrets/api_key)..."
+  #         echo "🔐 DB password preview: $(head -c 10 ./secrets/db_password)..."
+        
+  #     - name: "🔐 Build with Dockerfile Secrets"
+  #       id: secrets_build
+  #       uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+  #       with:
+  #         username: ${{ secrets.DOCKER_NEW_USERNAME }}
+  #         password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+  #         context: .
+  #         file: Dockerfile  # Uses the modified Dockerfile
+  #         repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+  #         repository: test-secrets
+  #         tag: secrets-${{ github.run_number }}
+  #         platforms: linux/amd64
+          
+  #         # Secrets for build (using workspace-relative paths)
+  #         secrets: |
+  #           id=api_key,src=./secrets/api_key
+  #           id=db_password,src=./secrets/db_password
+          
+  #         # Security attestations
+  #         provenance: true
+  #         sbom: true
+          
+  #         # Use registry cache
+  #         cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-secrets:cache
+  #         cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-secrets:cache,mode=max
+          
+  #         # Build args for verification
+  #         build_args: |
+  #           BUILD_WITH_SECRETS=true
+  #           BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+  #           RUN_NUMBER=${{ github.run_number }}
+          
+  #         labels: |
+  #           test.type=secure-build-with-secrets
+  #           security.secrets=true
+  #           security.attestation.provenance=true
+  #           security.attestation.sbom=true
+  #           dockerfile.secrets=true
+  #           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+  #           org.opencontainers.image.revision=${{ github.sha }}
+            
+  #     - name: "✅ Verify Secrets Build Success"
+  #       if: steps.secrets_build.outcome == 'success'
+  #       run: |
+  #         echo "🎉 SECRETS BUILD SUCCESSFUL!"
+  #         echo "============================"
+  #         echo "✅ Build Status: SUCCESS"
+  #         echo "✅ Image URL: ${{ steps.secrets_build.outputs.image_url }}"
+  #         echo "✅ Build Time: ${{ steps.secrets_build.outputs.build_time }}s"
+  #         echo "✅ Platform: linux/amd64"
+  #         echo "✅ Dockerfile Secrets: Used"
+  #         echo "✅ Provenance: Enabled"
+  #         echo "✅ SBOM: Enabled"
+          
+  #     - name: "❌ Secrets Build Failed"
+  #       if: steps.secrets_build.outcome == 'failure'
+  #       run: |
+  #         echo "❌ SECRETS BUILD FAILED!"
+  #         echo "========================"
+  #         echo "❌ Build Status: FAILED"
+  #         echo "❌ Check the logs above for specific error details"
+  #         echo ""
+  #         echo "🔧 Common Issues:"
+  #         echo "- Secret file path not accessible"
+  #         echo "- Dockerfile syntax error"
+  #         echo "- BuildKit version compatibility"
+  #         exit 1
+
+  # basic-security-build:
+  #   runs-on: ubuntu-latest
+  #   name: Basic Security Test (No Secrets)
+    
+  #   steps:
+  #     - name: Checkout
+  #       uses: actions/checkout@v4
+        
+  #     - name: "🔐 Basic Security Build"
+  #       id: basic_security_build
+  #       uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
+  #       with:
+  #         username: ${{ secrets.DOCKER_NEW_USERNAME }}
+  #         password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+  #         context: .
+  #         file: Dockerfile
+  #         repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
+  #         repository: test-basic-security
+  #         tag: basic-security-${{ github.run_number }}
+  #         platforms: linux/amd64
+          
+  #         # Security features only
+  #         provenance: true
+  #         sbom: true
+          
+  #         # Simple build args
+  #         build_args: |
+  #           SECURITY_TEST=basic
+  #           BUILD_NUMBER=${{ github.run_number }}
+          
+  #         labels: |
+  #           test.type=basic-security
+  #           security.attestation.provenance=true
+  #           security.attestation.sbom=true
+  #           security.secrets=false
+  #           org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
+            
+  #     - name: "✅ Verify Basic Security Build"
+  #       if: steps.basic_security_build.outcome == 'success'
+  #       run: |
+  #         echo "🎉 BASIC SECURITY BUILD SUCCESSFUL!"
+  #         echo "=================================="
+  #         echo "✅ Build Status: SUCCESS"
+  #         echo "✅ Image URL: ${{ steps.basic_security_build.outputs.image_url }}"
+  #         echo "✅ Build Time: ${{ steps.basic_security_build.outputs.build_time }}s"
+  #         echo "✅ Provenance: Generated"
+  #         echo "✅ SBOM: Generated"
+  #         echo "✅ No secrets required"
+
+  # verify-security-images:
+  #   needs: [security-attestations, secure-build-with-dockerfile-secrets, basic-security-build]
+  #   if: always()
+  #   runs-on: ubuntu-latest
+  #   name: Verify Security Images
+    
+  #   steps:
+  #     - name: Login to Docker Hub
+  #       uses: docker/login-action@v3
+  #       with:
+  #         username: ${{ secrets.DOCKER_NEW_USERNAME }}
+  #         password: ${{ secrets.DOCKER_NEW_PASSWORD }}
+      
+  #     - name: "🔍 Security Features Verification"
+  #       run: |
+  #         echo "🔍 SECURITY FEATURES VERIFICATION REPORT"
+  #         echo "========================================"
+  #         echo ""
+  #         echo "**Test Run:** ${{ github.run_number }}"
+  #         echo "**Workflow:** ${{ github.workflow }}"
+  #         echo "**Date:** $(date -u)"
+  #         echo ""
+          
+  #         # Check build statuses
+  #         ATTESTATIONS_STATUS="${{ needs.security-attestations.result }}"
+  #         SECRETS_STATUS="${{ needs.secure-build-with-dockerfile-secrets.result }}"
+  #         BASIC_STATUS="${{ needs.basic-security-build.result }}"
+          
+  #         echo "## 📊 Security Test Results"
+  #         echo "| Test Type | Status | Features | Notes |"
+  #         echo "|-----------|--------|----------|-------|"
+          
+  #         SUCCESS_COUNT=0
+  #         TOTAL_TESTS=3
+          
+  #         # Security Attestations Test
+  #         if [[ "$ATTESTATIONS_STATUS" == "success" ]]; then
+  #           SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+  #           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-security:security-${{ github.run_number }}"
+            
+  #           if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+  #             SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
+  #             PROVENANCE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "security.attestation.provenance"}}' 2>/dev/null || echo "unknown")
+  #             echo "| Security Attestations | ✅ Success | Provenance + SBOM | Size: $SIZE, Multi-platform |"
+  #           else
+  #             echo "| Security Attestations | ⚠️ Build OK, Pull Failed | Provenance + SBOM | Image not accessible |"
+  #           fi
+  #         else
+  #           echo "| Security Attestations | ❌ Failed | Provenance + SBOM | Multi-platform build issues |"
+  #         fi
+          
+  #         # Dockerfile Secrets Test
+  #         if [[ "$SECRETS_STATUS" == "success" ]]; then
+  #           SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+  #           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-secrets:secrets-${{ github.run_number }}"
+            
+  #           if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+  #             SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
+  #             echo "| Dockerfile Secrets | ✅ Success | Secrets + Security | Size: $SIZE, Build-time secrets |"
+              
+  #             # Verify build info
+  #             echo ""
+  #             echo "🔐 **Secrets Build Verification:**"
+  #             docker run --rm "$IMAGE_NAME" cat /usr/src/app/security-build-info.txt 2>/dev/null || echo "Security build info not accessible"
+  #           else
+  #             echo "| Dockerfile Secrets | ⚠️ Build OK, Pull Failed | Secrets + Security | Image not accessible |"
+  #           fi
+  #         else
+  #           echo "| Dockerfile Secrets | ❌ Failed | Secrets + Security | Secret mounting issues |"
+  #         fi
+          
+  #         # Basic Security Test
+  #         if [[ "$BASIC_STATUS" == "success" ]]; then
+  #           SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
+  #           IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-basic-security:basic-security-${{ github.run_number }}"
+            
+  #           if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
+  #             SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
+  #             echo "| Basic Security | ✅ Success | Provenance + SBOM | Size: $SIZE, Simple attestations |"
+  #           else
+  #             echo "| Basic Security | ⚠️ Build OK, Pull Failed | Provenance + SBOM | Image not accessible |"
+  #           fi
+  #         else
+  #           echo "| Basic Security | ❌ Failed | Provenance + SBOM | Basic security issues |"
+  #         fi
+          
+  #         echo ""
+  #         echo "## 🔒 Security Features Summary"
+  #         echo ""
+  #         echo "### ✅ Successfully Tested Features:"
+  #         echo "- **Provenance Attestation**: Build origin and process verification"
+  #         echo "- **SBOM (Software Bill of Materials)**: Component inventory generation"
+  #         echo "- **Dockerfile Secrets**: Build-time secret mounting"
+  #         echo "- **Multi-platform Security**: Security features across architectures"
+  #         echo "- **Registry Cache**: Secure caching for reproducible builds"
+  #         echo ""
+  #         echo "### 🎯 Security Benefits:"
+  #         echo "- **Supply Chain Security**: Provenance tracks build authenticity"
+  #         echo "- **Vulnerability Management**: SBOM enables component scanning"
+  #         echo "- **Secret Safety**: Build secrets never stored in final image"
+  #         echo "- **Reproducible Builds**: Cache ensures consistent security posture"
+  #         echo ""
+  #         echo "## 🎯 Final Security Results"
+  #         echo "=========================="
+          
+  #         if [[ $SUCCESS_COUNT -eq $TOTAL_TESTS ]]; then
+  #           echo "🎉 **ALL SECURITY TESTS PASSED!** ($SUCCESS_COUNT/$TOTAL_TESTS)"
+  #           echo ""
+  #           echo "- ✅ **Your Docker Action Successfully Supports:**"
+  #           echo "- ✅ Provenance attestation generation"
+  #           echo "- ✅ SBOM (Software Bill of Materials) generation"
+  #           echo "- ✅ Build-time secret mounting"
+  #           echo "- ✅ Multi-platform security features"
+  #           echo "- ✅ Secure caching mechanisms"
+  #         elif [[ $SUCCESS_COUNT -gt 0 ]]; then
+  #           echo "⚠️ **PARTIAL SUCCESS:** $SUCCESS_COUNT/$TOTAL_TESTS tests passed"
+  #           echo ""
+  #           echo "🔧 **Some security features work, others need attention**"
+  #         else
+  #           echo "❌ **ALL SECURITY TESTS FAILED**"
+  #           echo ""
+  #           echo "🔧 **Security features may not be properly supported**"
+  #         fi
+          
+  #         echo ""
+  #         echo "📋 **Action Version:** dinushchathurya/build-tag-push-action@v2.0.0-rc.1"
+  #         echo "🔗 **Security Documentation**: https://docs.docker.com/build/attestations/"
+
+  # generate-security-report:
+  #   needs: [security-attestations, secure-build-with-dockerfile-secrets, basic-security-build, verify-security-images]
+  #   if: always()
+  #   runs-on: ubuntu-latest
+  #   name: Generate Security Report
+    
+  #   steps:
+  #     - name: "📊 Generate Security Report"
+  #       run: |
+  #         cat > security-report.md << 'EOF'
+  #         # 🔒 Security Features Test Report
+          
+  #         **Generated:** $(date -u)  
+  #         **Workflow:** ${{ github.workflow }}  
+  #         **Run ID:** ${{ github.run_id }}  
+          
+  #         ## 📋 Security Test Results
+          
+  #         | Security Feature | Status | Build Time | Platform Support |
+  #         |-----------------|--------|------------|------------------|
+  #         | Provenance + SBOM (Multi-platform) | ${{ needs.security-attestations.result == 'success' && '✅ Success' || '❌ Failed' }} | N/A | linux/amd64,linux/arm64 |
+  #         | Dockerfile Secrets + Security | ${{ needs.secure-build-with-dockerfile-secrets.result == 'success' && '✅ Success' || '❌ Failed' }} | N/A | linux/amd64 |
+  #         | Basic Security Features | ${{ needs.basic-security-build.result == 'success' && '✅ Success' || '❌ Failed' }} | N/A | linux/amd64 |
+  #         | Image Verification | ${{ needs.verify-security-images.result == 'success' && '✅ Success' || '❌ Failed' }} | N/A | All |
+          
+  #         ## 🔒 Security Features Tested
+          
+  #         ### Attestations
+  #         - ✅ **Provenance**: Build authenticity and origin tracking
+  #         - ✅ **SBOM**: Software Bill of Materials for vulnerability scanning
+          
+  #         ### Build Security
+  #         - ✅ **Dockerfile Secrets**: Secure build-time secret injection
+  #         - ✅ **Multi-platform**: Security across different architectures
+  #         - ✅ **Registry Cache**: Secure and reproducible caching
+          
+  #         ### Image Security
+  #         - ✅ **Label Verification**: Security metadata in image labels
+  #         - ✅ **Build Info**: Verification of security features applied
+          
+  #         ## 🎯 Security Compliance
+          
+  #         ${{ (needs.security-attestations.result == 'success' || needs.secure-build-with-dockerfile-secrets.result == 'success' || needs.basic-security-build.result == 'success') && '✅ **SECURITY FEATURES OPERATIONAL**' || '⚠️ **SECURITY FEATURES NEED ATTENTION**' }}
+          
+  #         ### Recommendations
+  #         - Use provenance attestation for supply chain security
+  #         - Generate SBOM for vulnerability management
+  #         - Implement build-time secrets for sensitive data
+  #         - Enable registry caching for reproducible builds
+          
+  #         ---
+  #         *Security report generated by GitHub Actions*
+  #         EOF
+          
+  #         echo "📋 Security test report:"
+  #         cat security-report.md
+          
+  #     - name: Upload Security Report
+  #       uses: actions/upload-artifact@v4
+  #       with:
+  #         name: security-report-${{ github.run_number }}
+  #         path: security-report.md
+  #         retention-days: 30
