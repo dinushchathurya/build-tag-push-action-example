@@ -27,11 +27,14 @@ jobs:
           tag: security-${{ github.run_number }}
           platforms: linux/amd64,linux/arm64
           
-          # Security features
+          # Try different attestation settings
           provenance: true
           sbom: true
           
-          # Use registry cache instead of GHA cache
+          # Make sure attestations are pushed to registry
+          push: true
+    
+      # Cache settings
           cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-security:cache
           cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/test-security:cache,mode=max
 
