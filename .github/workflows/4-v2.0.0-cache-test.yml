@@ -13,15 +13,8 @@ on:
           - cache-only
           - no-cache-only
   push:
-    branches: [ main, develop ]
     paths:
-      - 'Dockerfile'
-      - '.github/workflows/**'
-  pull_request:
-    branches: [ main ]
-    paths:
-      - 'Dockerfile'
-      - '.github/workflows/**'
+    - '.github/workflows/4-v2.0.0-cache-test.yml'
 
 env:
   REGISTRY: docker.io
