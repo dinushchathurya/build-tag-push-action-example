@@ -1,4 +1,4 @@
-name: 5- Docker Build and Push withEnhanced Network and Resources Test
+name: 5- Docker Build and Push with Enhanced Network and Resources Test
 
 on:
   workflow_dispatch:
@@ -39,11 +39,11 @@ jobs:
         id: host_network_build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: test-host-network
           tag: host-network-${{ github.run_number }}
           
@@ -120,11 +120,11 @@ jobs:
         id: resources_build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: test-resource-limits
           tag: resources-${{ github.run_number }}
           
@@ -205,11 +205,11 @@ jobs:
         id: combined_build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
           context: .
           file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_USERNAME }}
+          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
           repository: test-combined-config
           tag: combined-${{ github.run_number }}
           
@@ -232,8 +232,7 @@ jobs:
             memlock=67108864:67108864
           cgroup_parent: /docker/test-container
           
-          # Additional build options
-          target: production
+          # Additional build options - REMOVED target: production
           pull: true
           platforms: linux/amd64
           
@@ -281,9 +280,9 @@ jobs:
           echo "  ✅ Cgroup Parent: /docker/test-container"
           echo ""
           echo "📋 Build Options:"
-          echo "  ✅ Target Stage: production"
           echo "  ✅ Pull Latest: enabled"
           echo "  ✅ Platform: linux/amd64"
+          echo "  ✅ Single-stage Dockerfile"
           
       - name: "❌ Combined Configuration Build Failed"
         if: steps.combined_build.outcome == 'failure'
@@ -313,8 +312,8 @@ jobs:
       - name: Login to Docker Hub
         uses: docker/login-action@v3
         with:
-          username: ${{ secrets.DOCKER_USERNAME }}
-          password: ${{ secrets.DOCKER_PASSWORD }}
+          username: ${{ secrets.DOCKER_NEW_USERNAME }}
+          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
       
       - name: "🔍 Verify Network and Resources Images"
         run: |
@@ -343,17 +342,17 @@ jobs:
             TOTAL_TESTS=$((TOTAL_TESTS + 1))
             if [[ "$HOST_NETWORK_STATUS" == "success" ]]; then
               SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-host-network:host-network-${{ github.run_number }}"
+              IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-host-network:host-network-${{ github.run_number }}"
               
               if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
                 NETWORK_MODE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.mode"}}' 2>/dev/null || echo "unknown")
                 echo "| Host Network | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, Mode: $NETWORK_MODE |"
                 
                 # Verify labels
                 echo ""
                 echo "🏷️ **Host Network Image Labels:**"
-                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("test.")) | "\(.key)=\(.value)"' | sort
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' 2>/dev/null | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("test.")) | "\(.key)=\(.value)"' | sort || echo "Labels not available"
               else
                 echo "| Host Network | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
               fi
@@ -369,17 +368,17 @@ jobs:
             TOTAL_TESTS=$((TOTAL_TESTS + 1))
             if [[ "$RESOURCES_STATUS" == "success" ]]; then
               SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-resource-limits:resources-${{ github.run_number }}"
+              IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-resource-limits:resources-${{ github.run_number }}"
               
               if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
                 SHM_SIZE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "resources.shm_size"}}' 2>/dev/null || echo "unknown")
                 echo "| Resource Limits | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, SHM: $SHM_SIZE |"
                 
                 # Verify labels
                 echo ""
                 echo "🏷️ **Resource Limits Image Labels:**"
-                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("resources.") or startswith("test.")) | "\(.key)=\(.value)"' | sort
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' 2>/dev/null | jq -r 'to_entries[] | select(.key | startswith("resources.") or startswith("test.")) | "\(.key)=\(.value)"' | sort || echo "Labels not available"
               else
                 echo "| Resource Limits | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
               fi
@@ -395,10 +394,10 @@ jobs:
             TOTAL_TESTS=$((TOTAL_TESTS + 1))
             if [[ "$COMBINED_STATUS" == "success" ]]; then
               SUCCESS_COUNT=$((SUCCESS_COUNT + 1))
-              IMAGE_NAME="${{ secrets.DOCKER_USERNAME }}/test-combined-config:combined-${{ github.run_number }}"
+              IMAGE_NAME="${{ secrets.DOCKER_NEW_USERNAME }}/test-combined-config:combined-${{ github.run_number }}"
               
               if docker pull "$IMAGE_NAME" >/dev/null 2>&1; then
-                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec)
+                SIZE=$(docker inspect "$IMAGE_NAME" --format='{{.Size}}' | numfmt --to=iec 2>/dev/null || echo "unknown")
                 NETWORK_MODE=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.mode"}}' 2>/dev/null || echo "unknown")
                 HOST_COUNT=$(docker inspect "$IMAGE_NAME" --format='{{index .Config.Labels "network.hosts.count"}}' 2>/dev/null || echo "unknown")
                 echo "| Combined Config | ✅ Success | \`$IMAGE_NAME\` | Size: $SIZE, Network: $NETWORK_MODE, Hosts: $HOST_COUNT |"
@@ -406,7 +405,7 @@ jobs:
                 # Verify comprehensive labels
                 echo ""
                 echo "🏷️ **Combined Configuration Image Labels:**"
-                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("resources.") or startswith("test.") or startswith("build.")) | "\(.key)=\(.value)"' | sort
+                docker inspect "$IMAGE_NAME" --format='{{json .Config.Labels}}' 2>/dev/null | jq -r 'to_entries[] | select(.key | startswith("network.") or startswith("resources.") or startswith("test.") or startswith("build.")) | "\(.key)=\(.value)"' | sort || echo "Labels not available"
               else
                 echo "| Combined Config | ⚠️ Build OK, Pull Failed | \`$IMAGE_NAME\` | Image not accessible |"
               fi
@@ -489,7 +488,7 @@ jobs:
           
           ### Combined Features
           - ✅ Network + Resource settings together
-          - ✅ Production target builds
+          - ✅ Single-stage Dockerfile compatibility
           - ✅ Image pull optimization
           - ✅ Comprehensive labeling
           
@@ -498,6 +497,7 @@ jobs:
           - ❌ `security.insecure` entitlement not supported in GitHub Actions
           - ⚠️ Some ulimit values may be restricted by runner environment
           - ⚠️ Cgroup configurations limited to safe values
+          - ❌ Multi-stage builds not tested (Dockerfile is single-stage)
           
           ## 🎯 Success Criteria
           
@@ -516,5 +516,3 @@ jobs:
           name: network-resources-report-${{ github.run_number }}
           path: network-resources-report.md
           retention-days: 30
-
-          
