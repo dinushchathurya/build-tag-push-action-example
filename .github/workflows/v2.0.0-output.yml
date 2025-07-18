@@ -47,7 +47,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "📥 Build and Load to Docker Daemon"
+      - name: "Build and Load to Docker Daemon"
         id: load_build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
