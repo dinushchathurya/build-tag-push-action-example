@@ -1,12 +1,4 @@
-- name: Restore Original Dockerfile
-        if: always()  # Always run, even if build fails
-        run: |
-          if [[ -f "Dockerfile.original" ]]; then
-            mv Dockerfile.original Dockerfile
-            echo "✅ Original Dockerfile restored"
-          else
-            echo "⚠️ Original Dockerfile backup not found"
-          finame: 6- Security Features Test
+name: 6- Security Features Test Workflow
 
 on:
   workflow_dispatch:
