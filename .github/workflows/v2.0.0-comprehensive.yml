@@ -1,4 +1,4 @@
-name: 11 - Comprehensive All-Features Test
+name: 11- Comprehensive All-Features Test
 
 on:
   workflow_dispatch:

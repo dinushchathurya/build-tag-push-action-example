@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
   push:
     paths:
-      - '.github/workflows/6-v2.0.0-security.yml' 
+      - '.github/workflows/6-v2.0.0-security.yml'  
 
 jobs:
   security-attestations:
