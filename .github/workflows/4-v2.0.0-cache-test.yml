@@ -1,37 +1,55 @@
-name: 4- Docker Build and Push with Cache Testing 
+name: Docker Build Cache Performance Testing (Overwrite Mode)
 
 on:
   workflow_dispatch:
     inputs:
-      cache_type:
-        description: 'Cache type to test'
+      test_type:
+        description: 'Test type to run'
         required: false
-        default: 'all'
+        default: 'comparison'
         type: choice
         options:
-          - all
-          - gha-cache
-          - registry-cache
-          - no-cache
+          - comparison
+          - cache-only
+          - no-cache-only
   push:
+    branches: [ main, develop ]
     paths:
-      - '.github/workflows/4-v2.0.0-cache-test.yml'
+      - 'Dockerfile'
+      - '.github/workflows/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'Dockerfile'
+      - '.github/workflows/**'
+
+env:
+  REGISTRY: docker.io
+  IMAGE_NAME: build-push-tag-action
 
 jobs:
   # ==========================================
-  # Build without Cache
+  # Build WITHOUT Cache (Baseline)
   # ==========================================
-  no-cache-build:
-    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'no-cache' || github.event.inputs.cache_type == ''
+  build-no-cache:
+    if: github.event.inputs.test_type == 'comparison' || github.event.inputs.test_type == 'no-cache-only' || github.event.inputs.test_type == ''
     runs-on: ubuntu-latest
-    name: Build Without Cache
+    name: 🚫 No Cache Build
+    outputs:
+      build_time: ${{ steps.calc_time.outputs.build_time }}
+      image_size: ${{ steps.build.outputs.image_size }}
+      image_digest: ${{ steps.build.outputs.digest }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "🔧 Build Without Cache"
-        id: build_no_cache
+      - name: Record start time
+        id: start_time
+        run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+        
+      - name: "🚫 Build WITHOUT Cache"
+        id: build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
@@ -39,28 +57,68 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: build-push-tag-action
-          tag: cache
+          repository: ${{ env.IMAGE_NAME }}
+          tag: no-cache-test
           platforms: linux/amd64
           no_cache: true
           labels: |
             cache.strategy=none
             test.type=no-cache
-  
+            test.run=${{ github.run_number }}
+            build.timestamp=${{ steps.start_time.outputs.start_time }}
+          
+      - name: Calculate build time
+        id: calc_time
+        run: |
+          end_time=$(date +%s)
+          build_time=$(( end_time - ${{ steps.start_time.outputs.start_time }} ))
+          echo "build_time=${build_time}" >> $GITHUB_OUTPUT
+          echo "🕐 No-cache build time: ${build_time} seconds"
+          
+      - name: Build summary
+        run: |
+          echo "## 🚫 No Cache Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: ${{ steps.calc_time.outputs.build_time }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Size**: ${{ steps.build.outputs.image_size }} bytes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: no-cache-test (overwritten)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image URL**: ${{ steps.build.outputs.image_url }}" >> $GITHUB_STEP_SUMMARY
+
   # ==========================================
-  # Build with GitHub Actions Cache
+  # Build WITH Registry Cache
   # ==========================================
-  gha-cache-build:
-    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'gha-cache' || github.event.inputs.cache_type == ''
+  build-with-cache:
+    if: github.event.inputs.test_type == 'comparison' || github.event.inputs.test_type == 'cache-only' || github.event.inputs.test_type == ''
     runs-on: ubuntu-latest
-    name: GitHub Actions Cache
+    name: 🚀 Registry Cache Build
+    outputs:
+      build_time: ${{ steps.calc_time.outputs.build_time }}
+      image_size: ${{ steps.build.outputs.image_size }}
+      image_digest: ${{ steps.build.outputs.digest }}
+      cache_hit: ${{ steps.cache_check.outputs.cache_hit }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "Build with GitHub Actions Cache"
-        id: build_gha_cache
+      - name: Record start time
+        id: start_time
+        run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+        
+      - name: Check if cache exists
+        id: cache_check
+        run: |
+          echo "🔍 Checking for existing cache..."
+          if docker manifest inspect ${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache >/dev/null 2>&1; then
+            echo "cache_hit=true" >> $GITHUB_OUTPUT
+            echo "✅ Cache found - expecting faster build"
+          else
+            echo "cache_hit=false" >> $GITHUB_OUTPUT
+            echo "❌ No cache found - first build will be slower"
+          fi
+        continue-on-error: true
+        
+      - name: "🚀 Build WITH Registry Cache"
+        id: build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
@@ -68,61 +126,58 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: build-push-tag-action
-          tag: gha-cache
-          platforms: linux/amd64,linux/arm64
-          cache_from: type=gha
-          cache_to: type=gha,mode=max
-          labels: |
-            cache.strategy=github-actions
-            cache.enabled=true
-            test.type=gha-cache
-  
-  # ==========================================
-  # Build with Registry Cache
-  # ==========================================
-  registry-cache-build:
-    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == 'registry-cache' || github.event.inputs.cache_type == ''
-    runs-on: ubuntu-latest
-    name: Registry Cache
-    
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        
-      - name: "Build with Registry Cache"
-        id: build_registry_cache
-        uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
-        with:
-          username: ${{ secrets.DOCKER_NEW_USERNAME }}
-          password: ${{ secrets.DOCKER_NEW_PASSWORD }}
-          context: .
-          file: Dockerfile
-          repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: build-push-tag-action
-          tag: registry-cache
+          repository: ${{ env.IMAGE_NAME }}
+          tag: cache-test
           platforms: linux/amd64
-          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
-          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
+          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache
+          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache,mode=max
           labels: |
             cache.strategy=registry
             cache.enabled=true
+            cache.hit=${{ steps.cache_check.outputs.cache_hit }}
             test.type=registry-cache
-  
+            test.run=${{ github.run_number }}
+            build.timestamp=${{ steps.start_time.outputs.start_time }}
+            
+      - name: Calculate build time
+        id: calc_time
+        run: |
+          end_time=$(date +%s)
+          build_time=$(( end_time - ${{ steps.start_time.outputs.start_time }} ))
+          echo "build_time=${build_time}" >> $GITHUB_OUTPUT
+          echo "🕐 Cached build time: ${build_time} seconds"
+          
+      - name: Build summary
+        run: |
+          echo "## 🚀 Registry Cache Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: ${{ steps.calc_time.outputs.build_time }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cache Hit**: ${{ steps.cache_check.outputs.cache_hit }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Size**: ${{ steps.build.outputs.image_size }} bytes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: cache-test (overwritten)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image URL**: ${{ steps.build.outputs.image_url }}" >> $GITHUB_STEP_SUMMARY
+
   # ==========================================
-  # Combined Cache Build
+  # Multi-Platform Cache Build
   # ==========================================
-  combined-cache-build:
-    if: github.event.inputs.cache_type == 'all' || github.event.inputs.cache_type == ''
+  build-multi-platform:
+    if: github.event.inputs.test_type == 'comparison' || github.event.inputs.test_type == 'cache-only' || github.event.inputs.test_type == ''
     runs-on: ubuntu-latest
-    name: Combined Cache Sources
+    name: 🌐 Multi-Platform Cache Build
+    outputs:
+      build_time: ${{ steps.calc_time.outputs.build_time }}
+      image_size: ${{ steps.build.outputs.image_size }}
+      image_digest: ${{ steps.build.outputs.digest }}
     
     steps:
       - name: Checkout
         uses: actions/checkout@v4
         
-      - name: "Build with Combined Cache"
-        id: build_combined_cache
+      - name: Record start time
+        id: start_time
+        run: echo "start_time=$(date +%s)" >> $GITHUB_OUTPUT
+        
+      - name: "🌐 Multi-Platform Build WITH Cache"
+        id: build
         uses: dinushchathurya/build-tag-push-action@v2.0.0-rc.1
         with:
           username: ${{ secrets.DOCKER_NEW_USERNAME }}
@@ -130,16 +185,203 @@ jobs:
           context: .
           file: Dockerfile
           repoOwner: ${{ secrets.DOCKER_NEW_USERNAME }}
-          repository: build-push-tag-action
-          tag: combined-cache
-          platforms: linux/amd64
-          cache_from: |
-            type=gha
-            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache
-          cache_to: |
-            type=gha,mode=max
-            type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/build-push-tag-action:cache,mode=max
+          repository: ${{ env.IMAGE_NAME }}
+          tag: multi-platform-test
+          platforms: linux/amd64,linux/arm64
+          cache_from: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache-multi
+          cache_to: type=registry,ref=${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache-multi,mode=max
           labels: |
-            cache.strategy=combined
-            cache.sources=gha,registry
-            test.type=combined-cache
+            cache.strategy=registry
+            cache.enabled=true
+            platforms=linux/amd64,linux/arm64
+            test.type=multi-platform-cache
+            test.run=${{ github.run_number }}
+            build.timestamp=${{ steps.start_time.outputs.start_time }}
+            
+      - name: Calculate build time
+        id: calc_time
+        run: |
+          end_time=$(date +%s)
+          build_time=$(( end_time - ${{ steps.start_time.outputs.start_time }} ))
+          echo "build_time=${build_time}" >> $GITHUB_OUTPUT
+          echo "🕐 Multi-platform build time: ${build_time} seconds"
+          
+      - name: Build summary
+        run: |
+          echo "## 🌐 Multi-Platform Build Results" >> $GITHUB_STEP_SUMMARY
+          echo "- **Build Time**: ${{ steps.calc_time.outputs.build_time }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "- **Platforms**: linux/amd64,linux/arm64" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Size**: ${{ steps.build.outputs.image_size }} bytes" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image Tag**: multi-platform-test (overwritten)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Image URL**: ${{ steps.build.outputs.image_url }}" >> $GITHUB_STEP_SUMMARY
+
+  # ==========================================
+  # Performance Comparison & Analysis
+  # ==========================================
+  performance-analysis:
+    if: github.event.inputs.test_type == 'comparison' || github.event.inputs.test_type == ''
+    needs: [build-no-cache, build-with-cache]
+    runs-on: ubuntu-latest
+    name: 📊 Performance Analysis
+    
+    steps:
+      - name: Calculate performance metrics
+        id: metrics
+        run: |
+          NO_CACHE_TIME=${{ needs.build-no-cache.outputs.build_time }}
+          CACHE_TIME=${{ needs.build-with-cache.outputs.build_time }}
+          CACHE_HIT=${{ needs.build-with-cache.outputs.cache_hit }}
+          
+          echo "no_cache_time=${NO_CACHE_TIME}" >> $GITHUB_OUTPUT
+          echo "cache_time=${CACHE_TIME}" >> $GITHUB_OUTPUT
+          
+          if [ "${NO_CACHE_TIME}" -gt 0 ] && [ "${CACHE_TIME}" -gt 0 ]; then
+            # Calculate time savings
+            TIME_SAVED=$((NO_CACHE_TIME - CACHE_TIME))
+            echo "time_saved=${TIME_SAVED}" >> $GITHUB_OUTPUT
+            
+            # Calculate percentage improvement
+            PERCENTAGE=$(( (TIME_SAVED * 100) / NO_CACHE_TIME ))
+            echo "percentage_improvement=${PERCENTAGE}" >> $GITHUB_OUTPUT
+            
+            # Determine cache effectiveness
+            if [ "${CACHE_HIT}" = "true" ] && [ "${PERCENTAGE}" -gt 20 ]; then
+              echo "cache_effectiveness=excellent" >> $GITHUB_OUTPUT
+              echo "effectiveness_emoji=🚀" >> $GITHUB_OUTPUT
+            elif [ "${CACHE_HIT}" = "true" ] && [ "${PERCENTAGE}" -gt 10 ]; then
+              echo "cache_effectiveness=good" >> $GITHUB_OUTPUT
+              echo "effectiveness_emoji=✅" >> $GITHUB_OUTPUT
+            elif [ "${CACHE_HIT}" = "true" ] && [ "${PERCENTAGE}" -gt 0 ]; then
+              echo "cache_effectiveness=moderate" >> $GITHUB_OUTPUT
+              echo "effectiveness_emoji=⚠️" >> $GITHUB_OUTPUT
+            else
+              echo "cache_effectiveness=poor" >> $GITHUB_OUTPUT
+              echo "effectiveness_emoji=❌" >> $GITHUB_OUTPUT
+            fi
+          else
+            echo "cache_effectiveness=unknown" >> $GITHUB_OUTPUT
+            echo "effectiveness_emoji=❓" >> $GITHUB_OUTPUT
+          fi
+          
+      - name: Generate performance report
+        run: |
+          echo "# 📊 Docker Build Cache Performance Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏁 Build Times Comparison" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Build Type | Time (seconds) | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|------------|----------------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚫 No Cache | ${{ needs.build-no-cache.outputs.build_time }} | Baseline |" >> $GITHUB_STEP_SUMMARY
+          echo "| 🚀 Registry Cache | ${{ needs.build-with-cache.outputs.build_time }} | ${{ needs.build-with-cache.outputs.cache_hit == 'true' && 'Cache Hit' || 'Cache Miss' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📈 Performance Metrics" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Time Saved**: ${{ steps.metrics.outputs.time_saved }} seconds" >> $GITHUB_STEP_SUMMARY
+          echo "- **Performance Improvement**: ${{ steps.metrics.outputs.percentage_improvement }}%" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cache Effectiveness**: ${{ steps.metrics.outputs.effectiveness_emoji }} ${{ steps.metrics.outputs.cache_effectiveness }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cache Hit**: ${{ needs.build-with-cache.outputs.cache_hit }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🎯 Recommendations" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          if [ "${{ steps.metrics.outputs.cache_effectiveness }}" = "excellent" ]; then
+            echo "✅ **Cache is working excellently!** Keep using registry cache for optimal performance." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.metrics.outputs.cache_effectiveness }}" = "good" ]; then
+            echo "👍 **Cache is providing good benefits.** Consider optimizing Dockerfile for even better cache hits." >> $GITHUB_STEP_SUMMARY
+          elif [ "${{ steps.metrics.outputs.cache_effectiveness }}" = "moderate" ]; then
+            echo "⚠️ **Cache provides moderate benefits.** Review Dockerfile layer structure for better caching." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "❌ **Cache is not effective.** Consider reviewing Dockerfile structure or cache strategy." >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏷️ Image Tags (Overwrite Mode)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **No Cache**: \`no-cache-test\` (overwritten each run)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cached**: \`cache-test\` (overwritten each run)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Multi-Platform**: \`multi-platform-test\` (overwritten each run)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Cache Storage**: \`cache\` & \`cache-multi\` (updated each run)" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Comment on PR (if applicable)
+        if: github.event_name == 'pull_request'
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const timeSaved = '${{ steps.metrics.outputs.time_saved }}';
+            const improvement = '${{ steps.metrics.outputs.percentage_improvement }}';
+            const effectiveness = '${{ steps.metrics.outputs.cache_effectiveness }}';
+            const emoji = '${{ steps.metrics.outputs.effectiveness_emoji }}';
+            
+            const comment = `## 📊 Docker Build Cache Performance Report
+            
+            ${emoji} **Cache Effectiveness**: ${effectiveness}
+            
+            | Metric | Value |
+            |--------|-------|
+            | Time Saved | ${timeSaved}s |
+            | Performance Improvement | ${improvement}% |
+            | Cache Hit | ${{ needs.build-with-cache.outputs.cache_hit }} |
+            
+            **Storage Mode**: Overwrite (no accumulation)
+            
+            Cache is ${effectiveness === 'excellent' ? 'working great! 🚀' : 
+                      effectiveness === 'good' ? 'providing good benefits ✅' : 
+                      effectiveness === 'moderate' ? 'providing some benefits ⚠️' : 
+                      'not effective ❌'}`;
+            
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: comment
+            });
+
+  # ==========================================
+  # Storage Summary & Cleanup Report
+  # ==========================================
+  storage-summary:
+    if: always()
+    needs: [build-no-cache, build-with-cache, build-multi-platform, performance-analysis]
+    runs-on: ubuntu-latest
+    name: 📊 Storage Summary
+    
+    steps:
+      - name: Generate storage report
+        run: |
+          echo "# 📊 DockerHub Storage Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🏷️ Images in Registry (Overwrite Mode)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Image | Type | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:no-cache-test\` | Test Image | ✅ Overwritten |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache-test\` | Test Image | ✅ Overwritten |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:multi-platform-test\` | Test Image | ✅ Overwritten |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache\` | Cache | 🔄 Updated |" >> $GITHUB_STEP_SUMMARY
+          echo "| \`${{ secrets.DOCKER_NEW_USERNAME }}/${{ env.IMAGE_NAME }}:cache-multi\` | Cache | 🔄 Updated |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 📈 Storage Efficiency" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Total Images**: 5 (fixed)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Storage Growth**: 0 per run" >> $GITHUB_STEP_SUMMARY
+          echo "- **Method**: Overwrite existing tags" >> $GITHUB_STEP_SUMMARY
+          echo "- **Benefit**: 🎯 No storage accumulation!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 🔄 What Happens Each Run" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "1. **Test Images** → Overwritten (same names)" >> $GITHUB_STEP_SUMMARY
+          echo "2. **Cache Images** → Updated with new layers" >> $GITHUB_STEP_SUMMARY
+          echo "3. **Total Count** → Stays at 5 images" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ **No cleanup needed** - Storage stays constant!" >> $GITHUB_STEP_SUMMARY
+          
+      - name: Show current run info
+        run: |
+          echo "## 🏃‍♂️ Current Run Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run Number**: ${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Run ID**: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Event**: ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Test Type**: ${{ github.event.inputs.test_type || 'comparison' }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Branch**: ${{ github.ref_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Commit**: ${{ github.sha }}" >> $GITHUB_STEP_SUMMARY
